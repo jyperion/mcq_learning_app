@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Interview Prep Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen">
+        <!-- Navigation -->
+        <nav class="bg-indigo-600 shadow-lg">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <div class="flex-shrink-0 flex items-center">
+                            <h1 class="text-white text-xl font-bold">ML Interview Prep</h1>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div id="scoreDisplay" class="hidden text-white bg-indigo-700 px-3 py-1 rounded">
+                            Score: <span id="score">0</span>
+                        </div>
+                        <div id="timerDisplay" class="hidden text-white bg-indigo-700 px-3 py-1 rounded">
+                            Time: <span id="timer">00:00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- Welcome Section -->
+            <div id="welcome" class="bg-white shadow rounded-lg p-6 mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome to ML Interview Prep!</h2>
+                <p class="text-gray-600 mb-6">Practice machine learning interview questions, track your progress, and improve your skills.</p>
+                <button id="startSession" class="bg-indigo-600 text-white px-6 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-700 transform hover:scale-105 transition-all">
+                    Start Practice Session
+                </button>
+            </div>
+
+            <!-- Concept Selection (Initially Hidden) -->
+            <div id="conceptSelection" class="hidden bg-white shadow rounded-lg p-6 mb-6">
+                <h3 class="text-xl font-bold text-gray-900 mb-4">Select a Topic</h3>
+                <div id="conceptList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Concepts will be dynamically added here -->
+                </div>
+            </div>
+
+            <!-- Question Section (Initially Hidden) -->
+            <div id="questionSection" class="hidden">
+                <div class="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-gray-900">Question <span id="questionNumber">1</span></h3>
+                        <div class="flex items-center space-x-2">
+                            <div class="h-2 w-48 bg-gray-200 rounded-full">
+                                <div id="progressBar" class="h-2 bg-green-500 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-6">
+                        <h2 id="questionText" class="text-lg text-gray-800 leading-relaxed"></h2>
+                    </div>
+                    <div id="optionsContainer" class="space-y-3">
+                        <!-- Options will be dynamically inserted here -->
+                    </div>
+                    <div id="feedbackSection" class="mt-4 p-4 rounded-lg hidden">
+                        <!-- Feedback will be shown here -->
+                    </div>
+                    <div class="mt-6 flex justify-between items-center">
+                        <button id="submitAnswer" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+                            Submit Answer
+                        </button>
+                        <button id="nextQuestion" class="hidden bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                            Next Question
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progressSection" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Overall Progress</h3>
+                    <canvas id="progressChart"></canvas>
+                </div>
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Concept Mastery</h3>
+                    <canvas id="conceptChart"></canvas>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let currentQuestion = null;
+        let timer = null;
+        let seconds = 0;
+        let score = 0;
+        let currentConcept = null;
+        let questionNumber = 1;
+        const API_BASE = 'http://localhost:5000/api';
+
+        // Initialize charts
+        const progressCtx = document.getElementById('progressChart').getContext('2d');
+        const conceptCtx = document.getElementById('conceptChart').getContext('2d');
+        let progressChart, conceptChart;
+
+        // Event Listeners
+        document.getElementById('startSession').addEventListener('click', startSession);
+        document.getElementById('submitAnswer').addEventListener('click', submitAnswer);
+        document.getElementById('nextQuestion').addEventListener('click', getNextQuestion);
+
+        async function startSession() {
+            try {
+                const response = await fetch(`${API_BASE}/session/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                
+                sessionId = data.session_id;
+                document.getElementById('welcome').classList.add('hidden');
+                document.getElementById('conceptSelection').classList.remove('hidden');
+                document.getElementById('scoreDisplay').classList.remove('hidden');
+                document.getElementById('timerDisplay').classList.remove('hidden');
+                
+                // Load concepts
+                await loadConcepts();
+            } catch (error) {
+                alert('Failed to start session: ' + error.message);
+            }
+        }
+
+        async function loadConcepts() {
+            try {
+                const response = await fetch(`${API_BASE}/concepts`);
+                const concepts = await response.json();
+                const conceptList = document.getElementById('conceptList');
+                conceptList.innerHTML = '';
+                
+                concepts.forEach(concept => {
+                    const button = document.createElement('button');
+                    button.className = 'w-full p-4 text-left bg-gray-50 hover:bg-indigo-50 rounded-lg transition-colors';
+                    button.innerHTML = `
+                        <h4 class="font-semibold text-gray-900">${concept.name}</h4>
+                    `;
+                    button.onclick = () => selectConcept(concept);
+                    conceptList.appendChild(button);
+                });
+            } catch (error) {
+                alert('Failed to load concepts: ' + error.message);
+            }
+        }
+
+        async function selectConcept(concept) {
+            currentConcept = concept;
+            document.getElementById('conceptSelection').classList.add('hidden');
+            document.getElementById('questionSection').classList.remove('hidden');
+            document.getElementById('progressSection').classList.remove('hidden');
+            await getNextQuestion();
+            startTimer();
+        }
+
+        async function getNextQuestion() {
+            try {
+                if (!currentConcept) return;
+                
+                const response = await fetch(`${API_BASE}/questions/random?concept_id=${currentConcept.id}&count=1`);
+                const questions = await response.json();
+                if (!questions || questions.length === 0) {
+                    alert('No more questions available for this concept.');
+                    return;
+                }
+                
+                currentQuestion = questions[0];  
+                displayQuestion(currentQuestion);
+                document.getElementById('nextQuestion').classList.add('hidden');
+                document.getElementById('submitAnswer').classList.remove('hidden');
+                document.getElementById('feedbackSection').classList.add('hidden');
+                updateProgressBar();
+                questionNumber++;
+            } catch (error) {
+                alert('Failed to get next question: ' + error.message);
+            }
+        }
+
+        async function displayQuestion(question) {
+            currentQuestion = question;
+            document.getElementById('questionText').textContent = question.question;
+            const optionsContainer = document.getElementById('optionsContainer');
+            optionsContainer.innerHTML = '';
+            
+            // Reset any previous feedback
+            const feedbackSection = document.getElementById('feedbackSection');
+            feedbackSection.classList.add('hidden');
+            feedbackSection.classList.remove('bg-green-100', 'bg-red-100');
+            
+            // Create options
+            question.options.forEach((option, index) => {
+                const optionLetter = String.fromCharCode(65 + index); // Convert 0,1,2,3 to A,B,C,D
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors';
+                optionDiv.innerHTML = `
+                    <input type="radio" id="option${optionLetter}" name="answer" value="${optionLetter}" class="form-radio h-4 w-4 text-indigo-600">
+                    <label for="option${optionLetter}" class="flex-grow cursor-pointer">
+                        <span class="font-medium">${optionLetter}.</span> ${option}
+                    </label>
+                `;
+                optionsContainer.appendChild(optionDiv);
+            });
+            
+            // Show submit button, hide next button
+            document.getElementById('submitAnswer').classList.remove('hidden');
+            document.getElementById('nextQuestion').classList.add('hidden');
+        }
+
+        async function submitAnswer() {
+            if (!currentQuestion) return;
+            
+            const selectedOption = document.querySelector('input[name="answer"]:checked');
+            if (!selectedOption) {
+                alert('Please select an answer');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/questions/submit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-ID': sessionId
+                    },
+                    body: JSON.stringify({
+                        question_id: currentQuestion.id,
+                        selected_option: selectedOption.value,
+                        time_taken: seconds
+                    })
+                });
+                
+                const result = await response.json();
+                showExplanation(result);
+                updateScore(result.is_correct);
+                stopTimer();
+                
+                // Show feedback
+                const feedbackSection = document.getElementById('feedbackSection');
+                const correctLetter = String.fromCharCode(65 + currentQuestion.options.indexOf(currentQuestion.correct_answer));
+                
+                feedbackSection.innerHTML = `
+                    <div class="flex items-start space-x-3">
+                        <div class="flex-shrink-0">
+                            ${result.is_correct 
+                                ? '<svg class="h-6 w-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+                                : '<svg class="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>'
+                            }
+                        </div>
+                        <div>
+                            <p class="font-medium">
+                                ${result.is_correct 
+                                    ? 'Correct!' 
+                                    : 'Incorrect. The correct answer is:'
+                                }
+                            </p>
+                            ${!result.is_correct 
+                                ? `<p class="mt-1"><span class="font-medium">Option ${correctLetter}:</span> ${currentQuestion.correct_answer}</p>`
+                                : ''
+                            }
+                            ${currentQuestion.explanation 
+                                ? `<p class="mt-2 text-gray-600">${currentQuestion.explanation}</p>`
+                                : ''
+                            }
+                        </div>
+                    </div>
+                `;
+                
+                feedbackSection.classList.remove('hidden');
+                feedbackSection.classList.add(result.is_correct ? 'bg-green-100' : 'bg-red-100');
+                
+                // Highlight correct and incorrect options
+                document.querySelectorAll('input[name="answer"]').forEach((input, index) => {
+                    const optionDiv = input.closest('div');
+                    const isCorrect = String.fromCharCode(65 + index) === correctLetter;
+                    const isSelected = input.value === selectedOption.value;
+                    
+                    if (isCorrect) {
+                        optionDiv.classList.add('bg-green-100');
+                    } else if (isSelected && !isCorrect) {
+                        optionDiv.classList.add('bg-red-100');
+                    }
+                    
+                    // Disable all options
+                    input.disabled = true;
+                });
+                
+                document.getElementById('submitAnswer').classList.add('hidden');
+                document.getElementById('nextQuestion').classList.remove('hidden');
+                
+            } catch (error) {
+                alert('Failed to submit answer: ' + error.message);
+            }
+        }
+
+        function showExplanation(result) {
+            const explanation = document.getElementById('explanation');
+            explanation.innerHTML = `
+                <div class="mb-2 font-semibold ${result.is_correct ? 'text-green-600' : 'text-red-600'}">
+                    ${result.is_correct ? 'Correct!' : 'Incorrect'}
+                </div>
+                <div class="text-gray-700">${currentQuestion.explanation}</div>
+            `;
+            explanation.classList.remove('hidden');
+        }
+
+        function updateScore(isCorrect) {
+            if (isCorrect) score += 10;
+            document.getElementById('score').textContent = score;
+        }
+
+        function updateProgressBar() {
+            const progressBar = document.getElementById('progressBar');
+            if (progressBar) {
+                const progress = (questionNumber - 1) * 10; // Assuming 10 questions total
+                progressBar.style.width = `${progress}%`;
+            }
+            document.getElementById('questionNumber').textContent = questionNumber;
+        }
+
+        async function updateProgress() {
+            try {
+                const response = await fetch(`${API_BASE}/progress`, {
+                    headers: { 'X-Session-ID': sessionId }
+                });
+                const progress = await response.json();
+                updateCharts(progress);
+            } catch (error) {
+                console.error('Failed to update progress:', error);
+            }
+        }
+
+        function startTimer() {
+            seconds = 0;
+            if (timer) clearInterval(timer);
+            timer = setInterval(() => {
+                seconds++;
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                document.getElementById('timer').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        }
+
+        function updateCharts(progress) {
+            if (progressChart) progressChart.destroy();
+            if (conceptChart) conceptChart.destroy();
+            
+            progressChart = new Chart(progressCtx, {
+                type: 'line',
+                data: {
+                    labels: progress.labels || [],
+                    datasets: [{
+                        label: 'Score Over Time',
+                        data: progress.scores || [],
+                        borderColor: 'rgb(79, 70, 229)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+            
+            conceptChart = new Chart(conceptCtx, {
+                type: 'radar',
+                data: {
+                    labels: progress.concepts || [],
+                    datasets: [{
+                        label: 'Concept Mastery',
+                        data: progress.mastery || [],
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: 'rgb(79, 70, 229)',
+                        pointBackgroundColor: 'rgb(79, 70, 229)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
