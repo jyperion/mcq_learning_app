@@ -100,14 +100,61 @@
         let timer = null;
         let seconds = 0;
         let score = 0;
-        let currentConcept = null;
         let questionNumber = 1;
+        let progressChart = null;
+        let conceptChart = null;
+        let progressCtx = null;
+        let conceptCtx = null;
+
         const API_BASE = 'http://localhost:5000/api';
 
-        // Initialize charts
-        const progressCtx = document.getElementById('progressChart').getContext('2d');
-        const conceptCtx = document.getElementById('conceptChart').getContext('2d');
-        let progressChart, conceptChart;
+        document.addEventListener('DOMContentLoaded', function() {
+            progressCtx = document.getElementById('progressChart').getContext('2d');
+            conceptCtx = document.getElementById('conceptChart').getContext('2d');
+            
+            // Initialize empty charts
+            progressChart = new Chart(progressCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['No Data'],
+                    datasets: [{
+                        data: [1],
+                        backgroundColor: ['#e5e7eb']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            conceptChart = new Chart(conceptCtx, {
+                type: 'radar',
+                data: {
+                    labels: ['No Data'],
+                    datasets: [{
+                        label: 'Concept Mastery',
+                        data: [0],
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: 'rgb(79, 70, 229)',
+                        pointBackgroundColor: 'rgb(79, 70, 229)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        });
 
         // Event Listeners
         document.getElementById('startSession').addEventListener('click', startSession);
@@ -243,13 +290,13 @@
                 });
                 
                 const result = await response.json();
-                showExplanation(result);
+                console.log('API Response:', result);
+                
                 updateScore(result.is_correct);
                 stopTimer();
                 
                 // Show feedback
                 const feedbackSection = document.getElementById('feedbackSection');
-                const correctLetter = String.fromCharCode(65 + currentQuestion.options.indexOf(currentQuestion.correct_answer));
                 
                 feedbackSection.innerHTML = `
                     <div class="flex items-start space-x-3">
@@ -267,11 +314,11 @@
                                 }
                             </p>
                             ${!result.is_correct 
-                                ? `<p class="mt-1"><span class="font-medium">Option ${correctLetter}:</span> ${currentQuestion.correct_answer}</p>`
+                                ? `<p class="mt-1"><span class="font-medium">Option ${result.correct_option}:</span> ${result.correct_answer}</p>`
                                 : ''
                             }
-                            ${currentQuestion.explanation 
-                                ? `<p class="mt-2 text-gray-600">${currentQuestion.explanation}</p>`
+                            ${result.explanation 
+                                ? `<p class="mt-2 text-gray-600">${result.explanation}</p>`
                                 : ''
                             }
                         </div>
@@ -281,10 +328,15 @@
                 feedbackSection.classList.remove('hidden');
                 feedbackSection.classList.add(result.is_correct ? 'bg-green-100' : 'bg-red-100');
                 
+                // Show progress section and update charts
+                document.getElementById('progressSection').classList.remove('hidden');
+                await updateProgress();
+                
                 // Highlight correct and incorrect options
                 document.querySelectorAll('input[name="answer"]').forEach((input, index) => {
                     const optionDiv = input.closest('div');
-                    const isCorrect = String.fromCharCode(65 + index) === correctLetter;
+                    const optionLetter = String.fromCharCode(65 + index);
+                    const isCorrect = optionLetter === result.correct_option;
                     const isSelected = input.value === selectedOption.value;
                     
                     if (isCorrect) {
@@ -301,19 +353,14 @@
                 document.getElementById('nextQuestion').classList.remove('hidden');
                 
             } catch (error) {
+                console.error('Submit Answer Error:', error);
                 alert('Failed to submit answer: ' + error.message);
             }
         }
 
         function showExplanation(result) {
-            const explanation = document.getElementById('explanation');
-            explanation.innerHTML = `
-                <div class="mb-2 font-semibold ${result.is_correct ? 'text-green-600' : 'text-red-600'}">
-                    ${result.is_correct ? 'Correct!' : 'Incorrect'}
-                </div>
-                <div class="text-gray-700">${currentQuestion.explanation}</div>
-            `;
-            explanation.classList.remove('hidden');
+            // This function is now handled within submitAnswer
+            return;
         }
 
         function updateScore(isCorrect) {
@@ -342,6 +389,92 @@
             }
         }
 
+        function updateCharts(progress) {
+            if (progressChart) progressChart.destroy();
+            if (conceptChart) conceptChart.destroy();
+            
+            // Overall progress chart
+            const overallStats = progress.overall_stats || {};
+            progressChart = new Chart(progressCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Correct', 'Incorrect'],
+                    datasets: [{
+                        data: [
+                            overallStats.correct_answers || 0,
+                            (overallStats.total_questions || 0) - (overallStats.correct_answers || 0)
+                        ],
+                        backgroundColor: [
+                            'rgb(34, 197, 94)',  // green-500
+                            'rgb(239, 68, 68)'   // red-500
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        title: {
+                            display: true,
+                            text: `Overall Accuracy: ${overallStats.accuracy || 0}%`
+                        }
+                    }
+                }
+            });
+            
+            // Concept mastery chart
+            const conceptStats = progress.concept_stats || [];
+            conceptChart = new Chart(conceptCtx, {
+                type: 'radar',
+                data: {
+                    labels: conceptStats.map(stat => stat.concept),
+                    datasets: [{
+                        label: 'Concept Mastery',
+                        data: conceptStats.map(stat => stat.accuracy),
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: 'rgb(79, 70, 229)',
+                        pointBackgroundColor: 'rgb(79, 70, 229)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            // Update summary statistics
+            const summaryStats = document.getElementById('summaryStats');
+            if (summaryStats) {
+                summaryStats.innerHTML = `
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold text-gray-700">Total Questions</h3>
+                            <p class="text-2xl font-bold text-indigo-600">${overallStats.total_questions || 0}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h3 class="text-lg font-semibold text-gray-700">Average Time</h3>
+                            <p class="text-2xl font-bold text-indigo-600">${Math.round(overallStats.avg_time || 0)}s</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
         function startTimer() {
             seconds = 0;
             if (timer) clearInterval(timer);
@@ -359,55 +492,6 @@
                 clearInterval(timer);
                 timer = null;
             }
-        }
-
-        function updateCharts(progress) {
-            if (progressChart) progressChart.destroy();
-            if (conceptChart) conceptChart.destroy();
-            
-            progressChart = new Chart(progressCtx, {
-                type: 'line',
-                data: {
-                    labels: progress.labels || [],
-                    datasets: [{
-                        label: 'Score Over Time',
-                        data: progress.scores || [],
-                        borderColor: 'rgb(79, 70, 229)',
-                        tension: 0.1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-            
-            conceptChart = new Chart(conceptCtx, {
-                type: 'radar',
-                data: {
-                    labels: progress.concepts || [],
-                    datasets: [{
-                        label: 'Concept Mastery',
-                        data: progress.mastery || [],
-                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                        borderColor: 'rgb(79, 70, 229)',
-                        pointBackgroundColor: 'rgb(79, 70, 229)'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        r: {
-                            beginAtZero: true,
-                            max: 100
-                        }
-                    }
-                }
-            });
         }
     </script>
 </body>

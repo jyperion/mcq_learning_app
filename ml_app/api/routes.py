@@ -228,43 +228,26 @@ def submit_answer():
                 data['time_taken']
             ))
             db.commit()
-        except Exception as e:
-            # Create user_progress table if it doesn't exist
-            db.execute('''
-                CREATE TABLE IF NOT EXISTS user_progress (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    question_id INTEGER NOT NULL,
-                    selected_option TEXT NOT NULL,
-                    is_correct BOOLEAN NOT NULL,
-                    time_taken INTEGER NOT NULL,
-                    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (id),
-                    FOREIGN KEY (question_id) REFERENCES questions (id)
-                )
-            ''')
-            db.commit()
-            
-            # Try insert again
-            db.execute('''
-                INSERT INTO user_progress 
-                (user_id, question_id, selected_option, is_correct, time_taken) 
-                VALUES (?, ?, ?, ?, ?)
-            ''', (
-                user_id,
-                data['question_id'],
-                data['selected_option'],
-                is_correct,
-                data['time_taken']
-            ))
-            db.commit()
+        except sqlite3.Error as e:
+            current_app.logger.error(f"Database error: {str(e)}")
+            return jsonify({"error": "Failed to record progress"}), 500
         
-        return jsonify({
-            'correct': is_correct,
-            'explanation': question['explanation'],
-            'session_id': session_id
-        })
+        # Get the correct answer text
+        options = json.loads(question['options'])
+        correct_index = ord(question['correct']) - ord('A')
+        correct_answer = options[correct_index] if 0 <= correct_index < len(options) else None
+        
+        response = {
+            "is_correct": is_correct,
+            "correct_option": question['correct'],  # The letter (A, B, C, D)
+            "correct_answer": correct_answer,       # The actual text of the correct answer
+            "explanation": question['explanation']
+        }
+        
+        return jsonify(response)
+        
     except Exception as e:
+        current_app.logger.error(f"Error in submit_answer: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @bp.route('/progress', methods=['GET'])
