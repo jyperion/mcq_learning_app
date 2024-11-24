@@ -60,7 +60,10 @@
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-xl font-bold text-gray-900">Question <span id="questionNumber">1</span></h3>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center space-x-4">
+                            <button id="endQuiz" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+                                End Quiz
+                            </button>
                             <button id="hintButton" class="hidden text-indigo-600 hover:text-indigo-800">
                                 <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -109,7 +112,7 @@
             </div>
         </main>
 
-        <!-- Progress Section (Moved to bottom) -->
+        <!-- Progress Section -->
         <div id="progressSection" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
             <div class="border-t border-gray-200 mt-8 pt-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">Your Progress</h2>
@@ -126,6 +129,16 @@
                             <canvas id="conceptChart"></canvas>
                         </div>
                     </div>
+                    <div class="bg-white shadow rounded-lg p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">Session History</h3>
+                        <div class="aspect-w-2 aspect-h-1">
+                            <canvas id="historyChart"></canvas>
+                        </div>
+                    </div>
+                    <div id="sessionSummary" class="bg-white shadow rounded-lg p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">Session Summary</h3>
+                        <!-- Summary content will be inserted here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -140,8 +153,10 @@
         let questionNumber = 1;
         let progressChart = null;
         let conceptChart = null;
+        let historyChart = null;
         let progressCtx = null;
         let conceptCtx = null;
+        let historyCtx = null;
         let currentConceptId = null;
 
         const API_BASE = '/api';
@@ -149,18 +164,20 @@
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('startSession').addEventListener('click', startSession);
             document.getElementById('nextButton').addEventListener('click', getNextQuestion);
+            document.getElementById('endQuiz').addEventListener('click', endQuiz);
             
             progressCtx = document.getElementById('progressChart').getContext('2d');
             conceptCtx = document.getElementById('conceptChart').getContext('2d');
+            historyCtx = document.getElementById('historyChart').getContext('2d');
             
-            // Initialize empty charts
+            // Initialize progress chart
             progressChart = new Chart(progressCtx, {
                 type: 'doughnut',
                 data: {
                     labels: ['No Data'],
                     datasets: [{
                         data: [1],
-                        backgroundColor: ['#e5e7eb']
+                        backgroundColor: ['#E5E7EB']
                     }]
                 },
                 options: {
@@ -173,16 +190,20 @@
                 }
             });
             
+            // Initialize concept chart
             conceptChart = new Chart(conceptCtx, {
                 type: 'radar',
                 data: {
-                    labels: ['No Data'],
+                    labels: ['Start practicing to see concept mastery!'],
                     datasets: [{
                         label: 'Concept Mastery',
                         data: [0],
                         backgroundColor: 'rgba(79, 70, 229, 0.2)',
                         borderColor: 'rgb(79, 70, 229)',
-                        pointBackgroundColor: 'rgb(79, 70, 229)'
+                        pointBackgroundColor: 'rgb(79, 70, 229)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(79, 70, 229)'
                     }]
                 },
                 options: {
@@ -190,7 +211,46 @@
                     scales: {
                         r: {
                             beginAtZero: true,
-                            max: 100
+                            max: 100,
+                            ticks: {
+                                stepSize: 20
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+            
+            // Initialize history chart
+            historyChart = new Chart(historyCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Session History',
+                        data: [],
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: 'rgb(79, 70, 229)',
+                        pointBackgroundColor: 'rgb(79, 70, 229)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(79, 70, 229)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
                         }
                     }
                 }
@@ -199,14 +259,12 @@
 
         // Event Listeners
         document.getElementById('options').addEventListener('click', function(e) {
-            const optionButton = e.target.closest('.option-button');
-            if (optionButton) {
-                // Remove selected class from all options
-                document.querySelectorAll('.option-button').forEach(button => {
-                    button.classList.remove('selected', 'bg-indigo-100', 'border-indigo-500');
-                });
-                // Add selected class to clicked option
-                optionButton.classList.add('selected', 'bg-indigo-100', 'border-indigo-500');
+            const button = e.target.closest('button');
+            if (button && !button.disabled) {
+                const answer = button.getAttribute('data-answer');
+                if (answer) {
+                    submitAnswer(answer);
+                }
             }
         });
 
@@ -337,99 +395,96 @@
         }
 
         function displayQuestion(question) {
-            if (!question || !question.text || !question.options) {
-                console.error('Invalid question data:', question);
-                return;
-            }
-
+            currentQuestion = question;
             document.getElementById('questionText').textContent = question.text;
+            document.getElementById('questionNumber').textContent = questionNumber;
+            
             const optionsContainer = document.getElementById('options');
             optionsContainer.innerHTML = '';
             
             question.options.forEach((option, index) => {
                 const button = document.createElement('button');
-                button.className = 'option-button w-full text-left p-4 rounded-lg border border-gray-200 hover:border-indigo-500 mb-3 transition-colors';
-                button.textContent = option;
-                button.onclick = () => submitAnswer(option);
+                button.className = 'w-full text-left p-4 rounded-lg border border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 transition-colors';
+                button.setAttribute('data-answer', option);
+                button.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="text-lg font-medium">${option}</span>
+                    </div>
+                `;
                 optionsContainer.appendChild(button);
             });
-
-            // Show hint button if available
-            const hintButton = document.getElementById('hintButton');
-            if (question.hint) {
-                hintButton.classList.remove('hidden');
-                hintButton.onclick = () => {
-                    document.getElementById('hintText').textContent = question.hint;
-                    document.getElementById('hintModal').classList.remove('hidden');
-                };
-            } else {
-                hintButton.classList.add('hidden');
-            }
-
-            // Reset UI state
-            document.querySelectorAll('.option-button').forEach(btn => {
-                btn.disabled = false;
-                btn.classList.remove('correct', 'incorrect');
-            });
-            document.getElementById('explanation').textContent = '';
+            
             document.getElementById('explanation').classList.add('hidden');
             document.getElementById('nextButton').classList.add('hidden');
+            
+            if (question.hint) {
+                document.getElementById('hintButton').classList.remove('hidden');
+                document.getElementById('hintText').textContent = question.hint;
+            } else {
+                document.getElementById('hintButton').classList.add('hidden');
+            }
+            
+            document.getElementById('questionSection').classList.remove('hidden');
+            startTimer();
         }
 
         async function submitAnswer(selectedAnswer) {
             if (!currentQuestion) return;
             
-            // Disable all option buttons
-            document.querySelectorAll('.option-button').forEach(btn => {
-                btn.disabled = true;
-            });
+            stopTimer();
             
             try {
-                const timeTaken = stopTimer();
-                const response = await fetch(`${API_BASE}/questions/${currentQuestion.id}/answer`, {
+                const response = await fetch(`${API_BASE}/practice/answer`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-Session-ID': sessionId
                     },
                     body: JSON.stringify({
+                        questionId: currentQuestion.id,
                         answer: selectedAnswer,
-                        time_taken: timeTaken
+                        timeTaken: seconds
                     })
                 });
                 
-                if (!response.ok) {
-                    throw new Error('Failed to submit answer');
-                }
+                if (!response.ok) throw new Error('Failed to submit answer');
                 
                 const result = await response.json();
                 
-                // Highlight correct/incorrect answers
-                document.querySelectorAll('.option-button').forEach(btn => {
-                    if (btn.textContent === selectedAnswer) {
-                        btn.classList.add(result.correct ? 'correct' : 'incorrect');
-                    }
-                    if (btn.textContent === result.correct_answer) {
-                        btn.classList.add('correct');
+                // Highlight correct and incorrect answers
+                const options = document.querySelectorAll('#options button');
+                options.forEach(button => {
+                    const answer = button.getAttribute('data-answer');
+                    button.disabled = true;
+                    
+                    if (answer === result.correctAnswer) {
+                        button.classList.remove('hover:border-indigo-500', 'hover:bg-indigo-50');
+                        button.classList.add('border-green-500', 'bg-green-50', 'text-green-800');
+                    } else if (answer === selectedAnswer && !result.correct) {
+                        button.classList.remove('hover:border-indigo-500', 'hover:bg-indigo-50');
+                        button.classList.add('border-red-500', 'bg-red-50', 'text-red-800');
                     }
                 });
                 
                 // Show explanation
-                if (currentQuestion.explanation) {
-                    document.getElementById('explanation').textContent = currentQuestion.explanation;
-                    document.getElementById('explanation').classList.remove('hidden');
-                }
+                const explanationDiv = document.getElementById('explanation');
+                explanationDiv.innerHTML = `
+                    <div class="${result.correct ? 'text-green-800' : 'text-red-800'} font-semibold mb-2">
+                        ${result.correct ? 'Correct!' : 'Incorrect!'}
+                    </div>
+                    <div class="text-gray-700">
+                        ${result.explanation}
+                    </div>
+                `;
+                explanationDiv.classList.remove('hidden');
                 
-                // Show next button
                 document.getElementById('nextButton').classList.remove('hidden');
-                
-                // Update progress
                 updateScore(result.correct);
+                updateProgressBar();
                 await updateProgress();
                 
             } catch (error) {
                 console.error('Error submitting answer:', error);
-                alert('Failed to submit answer: ' + error.message);
             }
         }
 
@@ -450,151 +505,94 @@
         async function updateProgress() {
             try {
                 const response = await fetch(`${API_BASE}/practice/progress`, {
-                    headers: { 'X-Session-ID': sessionId }
+                    headers: {
+                        'X-Session-ID': sessionId
+                    }
                 });
-                if (!response.ok) throw new Error('Failed to fetch progress');
-                const progress = await response.json();
-                updateCharts(progress);
                 
-                // Show progress section once we have data
+                if (!response.ok) throw new Error('Failed to fetch progress');
+                
+                const progress = await response.json();
+                
+                // Show progress section
                 document.getElementById('progressSection').classList.remove('hidden');
-            } catch (error) {
-                console.error('Failed to update progress:', error);
-            }
-        }
-
-        function updateCharts(progress) {
-            // Ensure we have valid progress data
-            const overallStats = progress.overall_stats || {};
-            const conceptStats = progress.concept_stats || [];
-            
-            // Destroy existing charts if they exist
-            if (progressChart) progressChart.destroy();
-            if (conceptChart) conceptChart.destroy();
-            
-            // Overall progress chart
-            const totalQuestions = overallStats.total_questions || 0;
-            const correctAnswers = overallStats.correct_answers || 0;
-            
-            progressChart = new Chart(progressCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Correct', 'Incorrect'],
-                    datasets: [{
-                        data: [
-                            correctAnswers,
-                            Math.max(0, totalQuestions - correctAnswers)  // Ensure non-negative
-                        ],
-                        backgroundColor: [
-                            'rgb(34, 197, 94)',  // green-500
-                            'rgb(239, 68, 68)'   // red-500
-                        ]
-                    }]
-                },
-                options: {
+                
+                // Update progress chart (doughnut chart)
+                const totalQuestions = progress.overall.totalQuestions;
+                const correctAnswers = progress.overall.correctAnswers;
+                const incorrectAnswers = totalQuestions - correctAnswers;
+                
+                progressChart.data.labels = ['Correct', 'Incorrect'];
+                progressChart.data.datasets[0].data = [correctAnswers, incorrectAnswers];
+                progressChart.data.datasets[0].backgroundColor = ['#10B981', '#EF4444'];  // green and red
+                progressChart.options.plugins.legend.display = true;
+                progressChart.update();
+                
+                // Update concept mastery chart (radar chart)
+                const conceptData = progress.byConcept;
+                
+                conceptChart.data.labels = conceptData.map(item => item.concept);
+                conceptChart.data.datasets[0].data = conceptData.map(item => item.accuracy);
+                conceptChart.options = {
                     responsive: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20
+                            }
+                        }
+                    },
                     plugins: {
                         legend: {
-                            position: 'bottom'
-                        },
-                        title: {
-                            display: true,
-                            text: `Overall Accuracy: ${overallStats.accuracy || 0}%`,
-                            font: {
-                                size: 16,
-                                weight: 'bold'
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const value = context.raw;
-                                    const percentage = Math.round((value / Math.max(1, totalQuestions)) * 100);
-                                    return `${context.label}: ${value} (${percentage}%)`;
-                                }
-                            }
+                            display: false
                         }
                     }
-                }
-            });
-            
-            // Concept mastery chart
-            if (conceptStats.length > 0) {
-                conceptChart = new Chart(conceptCtx, {
-                    type: 'radar',
-                    data: {
-                        labels: conceptStats.map(stat => stat.name),
-                        datasets: [{
-                            label: 'Concept Mastery',
-                            data: conceptStats.map(stat => stat.accuracy || 0),
-                            backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                            borderColor: 'rgb(79, 70, 229)',
-                            pointBackgroundColor: conceptStats.map(stat => {
-                                switch(stat.status) {
-                                    case 'Mastered': return 'rgb(34, 197, 94)';  // green
-                                    case 'In progress': return 'rgb(234, 179, 8)';  // yellow
-                                    case 'Needs practice': return 'rgb(239, 68, 68)';  // red
-                                    default: return 'rgb(156, 163, 175)';  // gray
-                                }
-                            }),
-                            pointRadius: 4,
-                            pointHoverRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            r: {
-                                beginAtZero: true,
-                                max: 100,
-                                ticks: {
-                                    stepSize: 20
-                                }
-                            }
-                        },
-                        plugins: {
-                            legend: {
-                                position: 'bottom'
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const stat = conceptStats[context.dataIndex];
-                                        return [
-                                            `Status: ${stat.status}`,
-                                            `Accuracy: ${stat.accuracy || 0}%`,
-                                            `Progress: ${stat.attempted}/${stat.total_questions} questions`
-                                        ];
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            } else {
-                // If no concept stats, show placeholder
-                conceptChart = new Chart(conceptCtx, {
-                    type: 'radar',
-                    data: {
-                        labels: ['Start practicing to see concept mastery!'],
-                        datasets: [{
-                            label: 'Concept Mastery',
-                            data: [0],
-                            backgroundColor: 'rgba(156, 163, 175, 0.2)',
-                            borderColor: 'rgb(156, 163, 175)',
-                            pointBackgroundColor: 'rgb(156, 163, 175)'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            r: {
-                                beginAtZero: true,
-                                max: 100
-                            }
-                        }
-                    }
-                });
+                };
+                conceptChart.update();
+                
+                // Update session history chart (line chart)
+                const historyData = progress.sessionHistory;
+                
+                historyChart.data.labels = historyData.map(item => item.sessionId);
+                historyChart.data.datasets[0].data = historyData.map(item => item.score);
+                historyChart.update();
+                
+                // Add summary text
+                const summaryHtml = `
+                    <div class="mt-4 grid grid-cols-2 gap-4">
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h4 class="text-lg font-semibold mb-2">Overall Performance</h4>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div>Questions Attempted:</div>
+                                <div class="text-right">${progress.overall.totalQuestions}</div>
+                                <div>Correct Answers:</div>
+                                <div class="text-right">${progress.overall.correctAnswers}</div>
+                                <div>Accuracy:</div>
+                                <div class="text-right">${progress.overall.accuracy}%</div>
+                                <div>Average Time:</div>
+                                <div class="text-right">${progress.overall.averageTime}s</div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h4 class="text-lg font-semibold mb-2">Difficulty Breakdown</h4>
+                            <div class="space-y-2">
+                                ${progress.byDifficulty.map(diff => `
+                                    <div class="grid grid-cols-2 gap-2 text-sm">
+                                        <div class="capitalize">${diff.difficulty}:</div>
+                                        <div class="text-right">${diff.accuracy}%</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('sessionSummary').innerHTML = summaryHtml;
+                
+            } catch (error) {
+                console.error('Failed to update progress:', error);
             }
         }
 
@@ -616,6 +614,52 @@
                 timer = null;
             }
             return seconds;
+        }
+
+        async function endQuiz() {
+            try {
+                const response = await fetch(`${API_BASE}/session/end`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Session-ID': sessionId
+                    }
+                });
+                
+                if (!response.ok) throw new Error('Failed to end session');
+                
+                const data = await response.json();
+                
+                // Show final score
+                alert(`Quiz ended! Your final score is ${data.score}`);
+                
+                // Reset session
+                sessionId = null;
+                currentQuestion = null;
+                timer = null;
+                seconds = 0;
+                score = 0;
+                questionNumber = 1;
+                
+                // Hide progress section
+                document.getElementById('progressSection').classList.add('hidden');
+                
+                // Reset charts
+                progressChart.data.labels = ['No Data'];
+                progressChart.data.datasets[0].data = [1];
+                progressChart.update();
+                
+                conceptChart.data.labels = ['Start practicing to see concept mastery!'];
+                conceptChart.data.datasets[0].data = [0];
+                conceptChart.update();
+                
+                historyChart.data.labels = [];
+                historyChart.data.datasets[0].data = [];
+                historyChart.update();
+                
+            } catch (error) {
+                console.error('Failed to end session:', error);
+                alert('Failed to end session: ' + error.message);
+            }
         }
     </script>
 </body>

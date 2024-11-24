@@ -38,7 +38,7 @@ def create_app(test_config=None):
         # Load the instance config, if it exists, when not testing
         app.config.from_mapping(
             SECRET_KEY='dev',
-            DATABASE=os.path.join(app.instance_path, 'ml_app.sqlite'),
+            DATABASE=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ml_app.sqlite'),
         )
     else:
         # Load the test config if passed in
@@ -70,28 +70,16 @@ def create_app(test_config=None):
     db.init_app(app)
     
     # Register blueprints
-    from . import routes
-    app.register_blueprint(routes.bp)
-
-    from .api import sessions, questions, concepts, practice, stats
-    app.register_blueprint(sessions.bp, url_prefix='/api/session')
-    app.register_blueprint(questions.bp, url_prefix='/api/questions')
-    app.register_blueprint(concepts.bp, url_prefix='/api/concepts')
-    app.register_blueprint(practice.bp, url_prefix='/api/practice')
-    app.register_blueprint(stats.bp, url_prefix='/api/stats')
+    from .api import questions, concepts, sessions, practice
+    app.register_blueprint(questions.bp)
+    app.register_blueprint(concepts.bp)
+    app.register_blueprint(sessions.bp)
+    app.register_blueprint(practice.bp)
 
     # Register main routes
     @app.route('/')
     def index():
-        return render_template('practice.html')
-
-    @app.route('/stats')
-    def stats():
-        return render_template('stats.html')
-
-    @app.route('/concepts')
-    def concepts():
-        return render_template('concepts.html')
+        return render_template('index.html')
     
     # Initialize database and questions if running with the Flask CLI
     if os.environ.get('FLASK_RUN_FROM_CLI'):

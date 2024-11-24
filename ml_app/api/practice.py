@@ -1,90 +1,121 @@
 from flask import Blueprint, jsonify, request, current_app
-from ..database.db import get_db
-from datetime import datetime
+from ml_app.database.db import get_db
 import json
+import uuid
+from datetime import datetime
 
-bp = Blueprint('practice', __name__, url_prefix='/api/practice')
+bp = Blueprint('practice', __name__, url_prefix='/api')
 
-@bp.route('/question', methods=['GET'])
-def get_question():
-    """Get a random question based on user's performance and preferences"""
-    concept_id = request.args.get('concept_id', type=int)
-    difficulty = request.args.get('difficulty')
+@bp.route('/practice/start', methods=['POST'])
+def start_session():
+    data = request.get_json()
+    user_name = data.get('userName', 'Anonymous')
     
+    session_id = str(uuid.uuid4())
     db = get_db()
-    try:
-        # Build query based on filters
-        sql = '''
-            SELECT q.*, GROUP_CONCAT(c.name) as concepts
-            FROM questions q
-            JOIN question_concepts qc ON q.id = qc.question_id
-            JOIN concepts c ON qc.concept_id = c.id
-        '''
-        params = []
-        
-        if concept_id:
-            sql += ' WHERE qc.concept_id = ?'
-            params.append(concept_id)
-        
-        if difficulty:
-            sql += ' AND' if concept_id else ' WHERE'
-            sql += ' q.difficulty = ?'
-            params.append(difficulty)
-        
-        # Group and order randomly
-        sql += ' GROUP BY q.id ORDER BY RANDOM() LIMIT 1'
-        
-        question = db.execute(sql, params).fetchone()
-        
-        if not question:
-            return jsonify({'error': 'No questions found matching criteria'}), 404
-        
-        return jsonify({
-            'id': question['id'],
-            'text': question['text'],
-            'options': question['options'].split('|'),
-            'difficulty': question['difficulty'],
-            'concepts': question['concepts'].split(',')
-        })
-    except Exception as e:
-        current_app.logger.error(f"Error getting question: {str(e)}")
-        return jsonify({'error': 'Failed to get question'}), 500
+    
+    db.execute(
+        'INSERT INTO sessions (id, user_name) VALUES (?, ?)',
+        (session_id, user_name)
+    )
+    db.commit()
+    
+    return jsonify({'sessionId': session_id})
 
-@bp.route('/answer', methods=['POST'])
-def submit_answer():
-    """Submit an answer for a question"""
+@bp.route('/practice/question', methods=['GET'])
+def get_question():
     session_id = request.headers.get('X-Session-ID')
     if not session_id:
-        return jsonify({'error': 'Session ID is required'}), 401
-        
-    data = request.get_json()
-    if not data or 'questionId' not in data or 'answer' not in data:
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    question_id = data['questionId']
-    user_answer = data['answer']
-    time_taken = data.get('timeTaken', 0)  # in seconds
+        return jsonify({'error': 'No session ID provided'}), 400
     
     db = get_db()
-    try:
-        # Get correct answer
-        question = db.execute(
-            'SELECT correct_answer, explanation FROM questions WHERE id = ?',
-            (question_id,)
-        ).fetchone()
-        
-        if not question:
-            return jsonify({'error': 'Question not found'}), 404
-        
-        is_correct = user_answer == question['correct_answer']
-        
-        # Record answer with session ID
-        db.execute(
-            'INSERT INTO user_answers (question_id, session_id, answer, is_correct, time_taken, timestamp) '
-            'VALUES (?, ?, ?, ?, ?, ?)',
-            (question_id, session_id, user_answer, is_correct, time_taken, datetime.now())
+    
+    # First, check if all questions have been answered
+    total_questions = db.execute('SELECT COUNT(*) as count FROM questions').fetchone()['count']
+    answered_questions = db.execute(
+        'SELECT COUNT(DISTINCT question_id) as count FROM user_answers WHERE session_id = ?',
+        (session_id,)
+    ).fetchone()['count']
+    
+    if answered_questions >= total_questions:
+        return jsonify({
+            'error': 'No more questions available',
+            'message': 'You have answered all available questions!'
+        }), 404
+    
+    # Get a random question that hasn't been answered in this session
+    question = db.execute('''
+        SELECT q.*, c.name as concept_name
+        FROM questions q
+        LEFT JOIN concepts c ON q.concept_id = c.id
+        WHERE q.id NOT IN (
+            SELECT DISTINCT question_id 
+            FROM user_answers 
+            WHERE session_id = ?
         )
+        ORDER BY RANDOM()
+        LIMIT 1
+    ''', (session_id,)).fetchone()
+    
+    if not question:
+        return jsonify({'error': 'No more questions available'}), 404
+    
+    current_app.logger.info(f"Retrieved question {question['id']} for session {session_id}")
+    
+    return jsonify({
+        'id': question['id'],
+        'text': question['text'],
+        'options': json.loads(question['options']),
+        'hint': question['hint'],
+        'difficulty': question['difficulty'],
+        'concept': question['concept_name']
+    })
+
+@bp.route('/practice/answer', methods=['POST'])
+def submit_answer():
+    session_id = request.headers.get('X-Session-ID')
+    if not session_id:
+        return jsonify({'error': 'No session ID provided'}), 400
+    
+    data = request.get_json()
+    question_id = data.get('questionId')
+    answer = data.get('answer')
+    time_taken = data.get('timeTaken', 0)
+    
+    if not question_id or not answer:
+        return jsonify({'error': 'Question ID and answer are required'}), 400
+    
+    db = get_db()
+    
+    # Check if this question has already been answered in this session
+    existing_answer = db.execute(
+        'SELECT id FROM user_answers WHERE session_id = ? AND question_id = ?',
+        (session_id, question_id)
+    ).fetchone()
+    
+    if existing_answer:
+        return jsonify({'error': 'Question already answered in this session'}), 400
+    
+    # Get correct answer
+    question = db.execute(
+        'SELECT correct_answer, explanation FROM questions WHERE id = ?',
+        (question_id,)
+    ).fetchone()
+    
+    if not question:
+        return jsonify({'error': 'Question not found'}), 404
+    
+    is_correct = answer == question['correct_answer']
+    
+    try:
+        # Record answer
+        db.execute('''
+            INSERT INTO user_answers (session_id, question_id, answer, is_correct, time_taken)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (session_id, question_id, answer, is_correct, time_taken))
         db.commit()
+        
+        current_app.logger.info(f"Recorded answer for question {question_id} in session {session_id}")
         
         return jsonify({
             'correct': is_correct,
@@ -92,117 +123,123 @@ def submit_answer():
             'explanation': question['explanation']
         })
     except Exception as e:
-        current_app.logger.error(f"Error submitting answer: {str(e)}")
-        return jsonify({'error': 'Failed to submit answer'}), 500
+        current_app.logger.error(f"Error recording answer: {str(e)}")
+        return jsonify({'error': 'Failed to record answer'}), 500
 
-@bp.route('/hint', methods=['GET'])
-def get_hint():
-    """Get a hint for a specific question"""
-    question_id = request.args.get('questionId', type=int)
-    if not question_id:
-        return jsonify({'error': 'Question ID required'}), 400
-    
-    db = get_db()
-    try:
-        hint = db.execute(
-            'SELECT hint FROM questions WHERE id = ?',
-            (question_id,)
-        ).fetchone()
-        
-        if not hint or not hint['hint']:
-            return jsonify({'error': 'No hint available'}), 404
-        
-        return jsonify({'hint': hint['hint']})
-    except Exception as e:
-        current_app.logger.error(f"Error getting hint: {str(e)}")
-        return jsonify({'error': 'Failed to get hint'}), 500
-
-@bp.route('/feedback', methods=['POST'])
-def submit_feedback():
-    """Submit feedback for a question"""
-    data = request.get_json()
-    if not data or 'questionId' not in data or 'feedback' not in data:
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    question_id = data['questionId']
-    feedback = data['feedback']
-    feedback_type = data.get('type', 'general')
-    
-    db = get_db()
-    try:
-        db.execute(
-            'INSERT INTO question_feedback (question_id, feedback, type, timestamp) '
-            'VALUES (?, ?, ?, ?)',
-            (question_id, feedback, feedback_type, datetime.now())
-        )
-        db.commit()
-        
-        return jsonify({'message': 'Feedback submitted successfully'})
-    except Exception as e:
-        current_app.logger.error(f"Error submitting feedback: {str(e)}")
-        return jsonify({'error': 'Failed to submit feedback'}), 500
-
-@bp.route('/progress', methods=['GET'])
+@bp.route('/practice/progress', methods=['GET'])
 def get_progress():
-    """Get user's progress statistics"""
+    session_id = request.headers.get('X-Session-ID')
+    if not session_id:
+        return jsonify({'error': 'No session ID provided'}), 400
+    
     db = get_db()
-    try:
-        # Get overall statistics
-        overall_stats = db.execute('''
-            SELECT 
-                COUNT(*) as total_questions,
-                SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_answers,
-                ROUND(AVG(time_taken)) as avg_time,
-                ROUND(AVG(CASE WHEN is_correct THEN 100.0 ELSE 0 END)) as accuracy
-            FROM user_answers
-        ''').fetchone()
-        
-        # Get concept-wise statistics
-        concept_stats = db.execute('''
-            WITH concept_answers AS (
-                SELECT 
-                    c.id,
-                    c.name,
-                    COUNT(ua.id) as attempted,
-                    SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) as correct,
-                    COUNT(q.id) as total_questions
-                FROM concepts c
-                LEFT JOIN question_concepts qc ON c.id = qc.concept_id
-                LEFT JOIN questions q ON qc.question_id = q.id
-                LEFT JOIN user_answers ua ON q.id = ua.question_id
-                GROUP BY c.id, c.name
-            )
-            SELECT 
-                id,
-                name,
-                attempted,
-                correct,
-                total_questions,
-                CASE 
-                    WHEN attempted = 0 THEN 0 
-                    ELSE ROUND((correct * 100.0) / attempted)
-                END as accuracy,
-                CASE
-                    WHEN attempted = 0 THEN 'Not started'
-                    WHEN (correct * 100.0) / attempted >= 80 THEN 'Mastered'
-                    WHEN (correct * 100.0) / attempted >= 50 THEN 'In progress'
-                    ELSE 'Needs practice'
-                END as status,
-                CASE
-                    WHEN attempted = 0 THEN 1
-                    WHEN (correct * 100.0) / attempted >= 80 THEN 4
-                    WHEN (correct * 100.0) / attempted >= 50 THEN 3
-                    ELSE 2
-                END as priority
-            FROM concept_answers
-            ORDER BY priority DESC, accuracy DESC
-        ''').fetchall()
-        
-        return jsonify({
-            'overall_stats': dict(overall_stats) if overall_stats else {},
-            'concept_stats': [dict(stat) for stat in concept_stats] if concept_stats else []
-        })
-        
-    except Exception as e:
-        current_app.logger.error(f"Error getting progress: {str(e)}")
-        return jsonify({'error': 'Failed to get progress'}), 500
+    
+    # Get overall stats
+    overall = db.execute('''
+        SELECT 
+            COUNT(*) as total_questions,
+            SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_answers,
+            ROUND(AVG(CASE WHEN is_correct THEN 100 ELSE 0 END), 2) as accuracy,
+            ROUND(AVG(time_taken), 2) as average_time
+        FROM user_answers
+        WHERE session_id = ?
+    ''', (session_id,)).fetchone()
+    
+    # Get concept mastery
+    concepts = db.execute('''
+        SELECT 
+            c.name as concept,
+            COUNT(ua.id) as attempted,
+            SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) as correct,
+            ROUND(AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END), 2) as accuracy
+        FROM concepts c
+        LEFT JOIN questions q ON q.concept_id = c.id
+        LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.session_id = ?
+        GROUP BY c.id, c.name
+        HAVING attempted > 0
+        ORDER BY c.name
+    ''', (session_id,)).fetchall()
+    
+    # Get difficulty breakdown
+    difficulty = db.execute('''
+        SELECT 
+            q.difficulty,
+            COUNT(ua.id) as attempted,
+            SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) as correct,
+            ROUND(AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END), 2) as accuracy
+        FROM questions q
+        LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.session_id = ?
+        GROUP BY q.difficulty
+        HAVING attempted > 0
+        ORDER BY q.difficulty
+    ''', (session_id,)).fetchall()
+    
+    # Get session history
+    history = db.execute('''
+        SELECT 
+            s.id as session_id,
+            COUNT(ua.id) as total_questions,
+            SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) as correct_answers,
+            ROUND(AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END), 2) as accuracy
+        FROM sessions s
+        LEFT JOIN user_answers ua ON ua.session_id = s.id
+        GROUP BY s.id
+        HAVING total_questions > 0
+        ORDER BY s.start_time DESC
+        LIMIT 10
+    ''').fetchall()
+    
+    return jsonify({
+        'overall': {
+            'totalQuestions': overall['total_questions'],
+            'correctAnswers': overall['correct_answers'],
+            'accuracy': overall['accuracy'] or 0,
+            'averageTime': overall['average_time'] or 0
+        },
+        'byConcept': [{
+            'concept': row['concept'],
+            'attempted': row['attempted'],
+            'correct': row['correct'],
+            'accuracy': row['accuracy'] or 0
+        } for row in concepts],
+        'byDifficulty': [{
+            'difficulty': row['difficulty'],
+            'attempted': row['attempted'],
+            'correct': row['correct'],
+            'accuracy': row['accuracy'] or 0
+        } for row in difficulty],
+        'sessionHistory': [{
+            'sessionId': row['session_id'],
+            'totalQuestions': row['total_questions'],
+            'correctAnswers': row['correct_answers'],
+            'accuracy': row['accuracy'] or 0
+        } for row in history]
+    })
+
+@bp.route('/session/end', methods=['POST'])
+def end_session():
+    session_id = request.headers.get('X-Session-ID')
+    if not session_id:
+        return jsonify({'error': 'No session ID provided'}), 400
+    
+    db = get_db()
+    
+    # Get session stats
+    stats = db.execute('''
+        SELECT 
+            COUNT(*) as total_questions,
+            SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_answers,
+            ROUND(AVG(CASE WHEN is_correct THEN 100 ELSE 0 END), 2) as accuracy
+        FROM user_answers
+        WHERE session_id = ?
+    ''', (session_id,)).fetchone()
+    
+    # Update session end time
+    db.execute('UPDATE sessions SET end_time = CURRENT_TIMESTAMP WHERE id = ?', (session_id,))
+    db.commit()
+    
+    return jsonify({
+        'score': stats['accuracy'] or 0,
+        'totalQuestions': stats['total_questions'],
+        'correctAnswers': stats['correct_answers']
+    })

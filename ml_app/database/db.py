@@ -6,9 +6,11 @@ from flask.cli import with_appcontext
 import os
 import json
 
+
 def adapt_datetime(dt):
     """Convert datetime to string."""
     return dt.isoformat()
+
 
 def convert_datetime(s):
     """Convert string to datetime."""
@@ -17,17 +19,20 @@ def convert_datetime(s):
     except (AttributeError, ValueError):
         return None
 
+
 def get_db():
     """Get database connection."""
-    if 'db' not in g:
+    if "db" not in g:
         try:
-            current_app.logger.debug(f"Connecting to database at: {current_app.config['DATABASE']}")
+            current_app.logger.debug(
+                f"Connecting to database at: {current_app.config['DATABASE']}"
+            )
             # Register timestamp converter
             sqlite3.register_adapter(datetime, adapt_datetime)
-            sqlite3.register_converter('timestamp', convert_datetime)
-            
+            sqlite3.register_converter("timestamp", convert_datetime)
+
             g.db = sqlite3.connect(
-                current_app.config['DATABASE'],
+                current_app.config["DATABASE"],
                 detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
             )
             g.db.row_factory = sqlite3.Row
@@ -37,10 +42,11 @@ def get_db():
             raise
     return g.db
 
+
 def close_db(e=None):
     """Close database connection."""
-    db = g.pop('db', None)
-    
+    db = g.pop("db", None)
+
     if db is not None:
         try:
             db.close()
@@ -48,227 +54,341 @@ def close_db(e=None):
         except Exception as e:
             current_app.logger.error(f"Error closing database: {str(e)}")
 
-def init_db(force=False):
+
+def load_questions():
+    """Load questions from JSON file into database."""
+    print("Loading questions from JSON file...")
+    # Read questions from JSON file
+    with open("data/ml_questions.json", "r") as f:
+        data = json.load(f)
+
+    print(f"Found {len(data['concepts'])} concepts in JSON file")
+
+    # Get database connection
+    db = get_db()
+
+    try:
+        # Insert concepts and questions
+        concept_count = 0
+        question_count = 0
+
+        for concept_name, concept_data in data["concepts"].items():
+            print(f"Loading concept: {concept_name}")
+            # Add concept
+            cursor = db.execute(
+                "INSERT INTO concepts (name, description) VALUES (?, ?)",
+                (concept_data["name"], concept_data.get("description", "")),
+            )
+            concept_id = cursor.lastrowid
+            concept_count += 1
+
+            # Add questions for this concept
+            for question in concept_data["questions"]:
+                # Convert options list to pipe-separated string
+                options_str = "|".join(question["options"])
+
+                # Insert question
+                cursor = db.execute(
+                    """
+                    INSERT INTO questions 
+                    (text, options, correct_answer, explanation, difficulty, hint)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        question["question"],
+                        options_str,
+                        question["correct"],
+                        question.get("explanation", ""),
+                        question.get("difficulty", "medium"),
+                        question.get("hint", ""),
+                    ),
+                )
+                question_id = cursor.lastrowid
+                question_count += 1
+
+                # Link question to concept
+                db.execute(
+                    """
+                    INSERT INTO question_concepts 
+                    (question_id, concept_id)
+                    VALUES (?, ?)
+                """,
+                    (question_id, concept_id),
+                )
+
+                if question_count % 10 == 0:
+                    print(f"Loaded {question_count} questions...")
+
+        # Commit all changes
+        db.commit()
+
+        # Verify the data was loaded
+        cursor = db.execute("SELECT COUNT(*) FROM concepts")
+        final_concept_count = cursor.fetchone()[0]
+
+        cursor = db.execute("SELECT COUNT(*) FROM questions")
+        final_question_count = cursor.fetchone()[0]
+
+        print("\nVerification:")
+        print(f"- Concepts in database: {final_concept_count}")
+        print(f"- Questions in database: {final_question_count}")
+
+        return True
+
+    except Exception as e:
+        print(f"Error loading data: {str(e)}")
+        db.rollback()
+        return False
+
+
+def init_db():
     """Initialize the database."""
     db = get_db()
-    
-    # Create tables from schema
-    with current_app.open_resource('database/schema.sql') as f:
-        db.executescript(f.read().decode('utf8'))
-    db.commit()
 
-def get_question(question_id):
-    """Get a single question by ID"""
-    db = get_db()
-    question = db.execute(
-        'SELECT q.*, c.name as concept FROM questions q '
-        'JOIN concept_questions cq ON q.id = cq.question_id '
-        'JOIN concepts c ON c.id = cq.concept_id '
-        'WHERE q.id = ?',
-        (question_id,)
-    ).fetchone()
-    return dict(question) if question else None
-
-def update_question_status(question_id, status, new_answer=None):
-    """Update a question's status and optionally its answer"""
-    db = get_db()
-    if status == 'updated' and new_answer:
-        db.execute(
-            'UPDATE questions SET status = ?, updated_answer = ? WHERE id = ?',
-            (status, new_answer, question_id)
-        )
-    else:
-        db.execute(
-            'UPDATE questions SET status = ? WHERE id = ?',
-            (status, question_id)
-        )
-    db.commit()
-
-def delete_question(question_id):
-    """Delete a question and its concept associations"""
-    db = get_db()
     try:
-        # Start a transaction
-        db.execute('BEGIN')
-        
-        # Delete from concept_questions first (foreign key constraint)
-        db.execute('DELETE FROM concept_questions WHERE question_id = ?', (question_id,))
-        
-        # Delete the question
-        result = db.execute('DELETE FROM questions WHERE id = ?', (question_id,))
-        
-        if result.rowcount == 0:
-            db.execute('ROLLBACK')
-            return False
-            
-        # Commit the transaction
-        db.execute('COMMIT')
-        return True
-        
+        # Create tables from schema
+        with current_app.open_resource("database/schema.sql") as f:
+            db.executescript(f.read().decode("utf8"))
+        load_questions()
+        db.commit()
+        current_app.logger.info("Database initialized successfully")
     except Exception as e:
-        db.execute('ROLLBACK')
-        current_app.logger.error(f"Error deleting question {question_id}: {str(e)}")
+        current_app.logger.error(f"Error initializing database: {str(e)}")
         raise
 
-@click.command('init-db')
-@click.option('--force', is_flag=True, help='Force reinitialize the database even if it exists')
-@with_appcontext
-def init_db_command(force):
+
+@click.command("init-db")
+def init_db_command():
     """Clear the existing data and create new tables."""
-    init_db(force)
-    click.echo('Initialized the database.')
+    try:
+        init_db()
+        click.echo("Initialized the database.")
+    except Exception as e:
+        click.echo(f"Error initializing database: {str(e)}")
+        raise
+
 
 def init_app(app):
     """Register database functions with the Flask app."""
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
 
+
+def get_question(question_id):
+    """Get a single question by ID"""
+    db = get_db()
+    question = db.execute(
+        "SELECT q.*, c.name as concept FROM questions q "
+        "JOIN concept_questions cq ON q.id = cq.question_id "
+        "JOIN concepts c ON c.id = cq.concept_id "
+        "WHERE q.id = ?",
+        (question_id,),
+    ).fetchone()
+    return dict(question) if question else None
+
+
+def update_question_status(question_id, status, new_answer=None):
+    """Update a question's status and optionally its answer"""
+    db = get_db()
+    if status == "updated" and new_answer:
+        db.execute(
+            "UPDATE questions SET status = ?, updated_answer = ? WHERE id = ?",
+            (status, new_answer, question_id),
+        )
+    else:
+        db.execute(
+            "UPDATE questions SET status = ? WHERE id = ?", (status, question_id)
+        )
+    db.commit()
+
+
+def delete_question(question_id):
+    """Delete a question and its concept associations"""
+    db = get_db()
+    try:
+        # Start a transaction
+        db.execute("BEGIN")
+
+        # Delete from concept_questions first (foreign key constraint)
+        db.execute(
+            "DELETE FROM concept_questions WHERE question_id = ?", (question_id,)
+        )
+
+        # Delete the question
+        result = db.execute("DELETE FROM questions WHERE id = ?", (question_id,))
+
+        if result.rowcount == 0:
+            db.execute("ROLLBACK")
+            return False
+
+        # Commit the transaction
+        db.execute("COMMIT")
+        return True
+
+    except Exception as e:
+        db.execute("ROLLBACK")
+        current_app.logger.error(f"Error deleting question {question_id}: {str(e)}")
+        raise
+
+
 def get_random_question():
     """Get a random question from the database"""
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'SELECT q.*, GROUP_CONCAT(c.name) as concepts '
-        'FROM questions q '
-        'LEFT JOIN question_concepts qc ON q.id = qc.question_id '
-        'LEFT JOIN concepts c ON qc.concept_id = c.id '
-        'GROUP BY q.id '
-        'ORDER BY RANDOM() LIMIT 1'
+        "SELECT q.*, GROUP_CONCAT(c.name) as concepts "
+        "FROM questions q "
+        "LEFT JOIN question_concepts qc ON q.id = qc.question_id "
+        "LEFT JOIN concepts c ON qc.concept_id = c.id "
+        "GROUP BY q.id "
+        "ORDER BY RANDOM() LIMIT 1"
     )
     question = cursor.fetchone()
     if question:
-        question['concepts'] = question['concepts'].split(',') if question['concepts'] else []
-        question['options'] = json.loads(question['options'])
+        question["concepts"] = (
+            question["concepts"].split(",") if question["concepts"] else []
+        )
+        question["options"] = json.loads(question["options"])
     return question
+
 
 def get_stats_overview():
     """Get overview statistics"""
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'SELECT COUNT(*) as total_questions, '
-        'AVG(CASE WHEN is_correct THEN 100 ELSE 0 END) as average_score, '
-        'SUM(time_spent) as total_time '
-        'FROM user_answers'
+        "SELECT COUNT(*) as total_questions, "
+        "AVG(CASE WHEN is_correct THEN 100 ELSE 0 END) as average_score, "
+        "SUM(time_spent) as total_time "
+        "FROM user_answers"
     )
     return cursor.fetchone()
+
 
 def get_concept_stats():
     """Get performance by concept"""
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'SELECT c.name as concept, '
-        'AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END) as score '
-        'FROM concepts c '
-        'JOIN question_concepts qc ON c.id = qc.concept_id '
-        'JOIN user_answers ua ON qc.question_id = ua.question_id '
-        'GROUP BY c.id, c.name'
+        "SELECT c.name as concept, "
+        "AVG(CASE WHEN ua.is_correct THEN 100 ELSE 0 END) as score "
+        "FROM concepts c "
+        "JOIN question_concepts qc ON c.id = qc.concept_id "
+        "JOIN user_answers ua ON qc.question_id = ua.question_id "
+        "GROUP BY c.id, c.name"
     )
     return cursor.fetchall()
+
 
 def get_progress_stats():
     """Get progress over time"""
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'SELECT date(created_at) as date, '
-        'AVG(CASE WHEN is_correct THEN 100 ELSE 0 END) as score '
-        'FROM user_answers '
-        'GROUP BY date(created_at) '
-        'ORDER BY date(created_at)'
+        "SELECT date(created_at) as date, "
+        "AVG(CASE WHEN is_correct THEN 100 ELSE 0 END) as score "
+        "FROM user_answers "
+        "GROUP BY date(created_at) "
+        "ORDER BY date(created_at)"
     )
     return cursor.fetchall()
+
 
 def get_recent_activity():
     """Get recent activity"""
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'SELECT ua.created_at as date, '
-        'c.name as concept, '
-        'CASE WHEN ua.is_correct THEN 100 ELSE 0 END as score, '
-        'ua.time_spent '
-        'FROM user_answers ua '
-        'JOIN questions q ON ua.question_id = q.id '
-        'JOIN question_concepts qc ON q.id = qc.question_id '
-        'JOIN concepts c ON qc.concept_id = c.id '
-        'ORDER BY ua.created_at DESC LIMIT 10'
+        "SELECT ua.created_at as date, "
+        "c.name as concept, "
+        "CASE WHEN ua.is_correct THEN 100 ELSE 0 END as score, "
+        "ua.time_spent "
+        "FROM user_answers ua "
+        "JOIN questions q ON ua.question_id = q.id "
+        "JOIN question_concepts qc ON q.id = qc.question_id "
+        "JOIN concepts c ON qc.concept_id = c.id "
+        "ORDER BY ua.created_at DESC LIMIT 10"
     )
     return cursor.fetchall()
+
 
 def get_all_concepts():
     """Get all concepts"""
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'SELECT c.*, '
-        'GROUP_CONCAT(t.name) as topics '
-        'FROM concepts c '
-        'LEFT JOIN concept_topics ct ON c.id = ct.concept_id '
-        'LEFT JOIN topics t ON ct.topic_id = t.id '
-        'GROUP BY c.id'
+        "SELECT c.*, "
+        "GROUP_CONCAT(t.name) as topics "
+        "FROM concepts c "
+        "LEFT JOIN concept_topics ct ON c.id = ct.concept_id "
+        "LEFT JOIN topics t ON ct.topic_id = t.id "
+        "GROUP BY c.id"
     )
     concepts = cursor.fetchall()
     for concept in concepts:
-        concept['topics'] = concept['topics'].split(',') if concept['topics'] else []
+        concept["topics"] = concept["topics"].split(",") if concept["topics"] else []
     return concepts
+
 
 def get_concept(concept_id):
     """Get concept details"""
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'SELECT c.*, '
-        'GROUP_CONCAT(DISTINCT t.name) as topics, '
-        'GROUP_CONCAT(DISTINCT p.name) as prerequisites '
-        'FROM concepts c '
-        'LEFT JOIN concept_topics ct ON c.id = ct.concept_id '
-        'LEFT JOIN topics t ON ct.topic_id = t.id '
-        'LEFT JOIN concept_prerequisites cp ON c.id = cp.concept_id '
-        'LEFT JOIN concepts p ON cp.prerequisite_id = p.id '
-        'WHERE c.id = ? '
-        'GROUP BY c.id',
-        (concept_id,)
+        "SELECT c.*, "
+        "GROUP_CONCAT(DISTINCT t.name) as topics, "
+        "GROUP_CONCAT(DISTINCT p.name) as prerequisites "
+        "FROM concepts c "
+        "LEFT JOIN concept_topics ct ON c.id = ct.concept_id "
+        "LEFT JOIN topics t ON ct.topic_id = t.id "
+        "LEFT JOIN concept_prerequisites cp ON c.id = cp.concept_id "
+        "LEFT JOIN concepts p ON cp.prerequisite_id = p.id "
+        "WHERE c.id = ? "
+        "GROUP BY c.id",
+        (concept_id,),
     )
     concept = cursor.fetchone()
     if concept:
-        concept['topics'] = concept['topics'].split(',') if concept['topics'] else []
-        concept['prerequisites'] = concept['prerequisites'].split(',') if concept['prerequisites'] else []
+        concept["topics"] = concept["topics"].split(",") if concept["topics"] else []
+        concept["prerequisites"] = (
+            concept["prerequisites"].split(",") if concept["prerequisites"] else []
+        )
     return concept
+
 
 def create_session(user_name):
     """Create a new practice session"""
     if not user_name:
         raise ValueError("User name is required")
-        
+
     db = get_db()
     try:
-        cursor = db.execute(
-            'INSERT INTO sessions (user_name) VALUES (?)',
-            (user_name,)
-        )
+        cursor = db.execute("INSERT INTO sessions (user_name) VALUES (?)", (user_name,))
         session_id = cursor.lastrowid
         db.commit()
-        current_app.logger.info(f"Created new session {session_id} for user {user_name}")
+        current_app.logger.info(
+            f"Created new session {session_id} for user {user_name}"
+        )
         return session_id
     except Exception as e:
         current_app.logger.error(f"Failed to create session: {str(e)}")
         raise
+
 
 def end_session(session_id):
     """End a practice session"""
     db = get_db()
     try:
         db.execute(
-            'UPDATE sessions SET end_time = ?, status = ? WHERE id = ?',
-            (datetime.now(), 'completed', session_id)
+            "UPDATE sessions SET end_time = ?, status = ? WHERE id = ?",
+            (datetime.now(), "completed", session_id),
         )
         db.commit()
         current_app.logger.info(f"Ended session {session_id}")
     except Exception as e:
         current_app.logger.error(f"Failed to end session: {str(e)}")
         raise
+
 
 def update_session_progress(session_id, question_id, is_correct, time_spent):
     """Update session progress with a new answer"""
@@ -277,21 +397,21 @@ def update_session_progress(session_id, question_id, is_correct, time_spent):
     try:
         # Record the answer
         cursor.execute(
-            'INSERT INTO user_answers (session_id, question_id, is_correct, time_spent) '
-            'VALUES (?, ?, ?, ?)',
-            (session_id, question_id, is_correct, time_spent)
+            "INSERT INTO user_answers (session_id, question_id, is_correct, time_spent) "
+            "VALUES (?, ?, ?, ?)",
+            (session_id, question_id, is_correct, time_spent),
         )
-        
+
         # Update session statistics
         cursor.execute(
-            'UPDATE practice_sessions SET '
-            'questions_answered = questions_answered + 1, '
-            'correct_answers = correct_answers + ?, '
-            'total_time = total_time + ? '
-            'WHERE id = ?',
-            (1 if is_correct else 0, time_spent, session_id)
+            "UPDATE practice_sessions SET "
+            "questions_answered = questions_answered + 1, "
+            "correct_answers = correct_answers + ?, "
+            "total_time = total_time + ? "
+            "WHERE id = ?",
+            (1 if is_correct else 0, time_spent, session_id),
         )
-        
+
         db.commit()
     except Exception as e:
         db.rollback()
