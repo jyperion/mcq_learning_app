@@ -211,3 +211,136 @@ def test_concurrent_sessions(client, mock_ollama_response):
         assert response.status_code == 200
         stats = response.json
         assert stats['total_questions'] == 3
+
+def test_ui_interaction_flow(client, mock_ollama_response):
+    """Test the complete user interface interaction flow"""
+    # Step 1: Load the practice page
+    response = client.get('/')
+    assert response.status_code == 200
+    assert b'ML Interview Practice' in response.data
+    
+    # Step 2: Get initial question
+    response = client.get('/api/questions/random')
+    assert response.status_code == 200
+    question_data = response.get_json()
+    question_id = question_data['id']
+    
+    # Step 3: Submit an answer
+    response = client.post(f'/api/questions/{question_id}/check',
+                          json={'answer': 0})
+    assert response.status_code == 200
+    result = response.get_json()
+    assert 'correct' in result
+    assert 'explanation' in result
+    
+    # Step 4: Recheck the question
+    response = client.post(f'/api/questions/{question_id}/recheck')
+    assert response.status_code == 200
+    recheck_result = response.get_json()
+    assert 'newAnswer' in recheck_result
+    
+    # Step 5: Check statistics page
+    response = client.get('/stats')
+    assert response.status_code == 200
+    assert b'Your Performance Statistics' in response.data
+    
+    # Step 6: Get statistics data
+    response = client.get('/api/stats/overview')
+    assert response.status_code == 200
+    stats_data = response.get_json()
+    assert 'totalQuestions' in stats_data
+    assert 'averageScore' in stats_data
+    
+    # Step 7: Load concepts page
+    response = client.get('/concepts')
+    assert response.status_code == 200
+    assert b'Machine Learning Concepts' in response.data
+    
+    # Step 8: Get concept list
+    response = client.get('/api/concepts')
+    assert response.status_code == 200
+    concepts = response.get_json()
+    assert isinstance(concepts, list)
+    
+    if len(concepts) > 0:
+        concept_id = concepts[0]['id']
+        # Step 9: Get concept details
+        response = client.get(f'/api/concepts/{concept_id}')
+        assert response.status_code == 200
+        concept_details = response.get_json()
+        assert 'name' in concept_details
+        assert 'topics' in concept_details
+
+def test_error_recovery_flow(client, mock_ollama_error_response):
+    """Test how the UI handles and recovers from errors"""
+    # Step 1: Try to get a question when Ollama is down
+    response = client.get('/api/questions/random')
+    assert response.status_code == 500
+    error_data = response.get_json()
+    assert 'error' in error_data
+    
+    # Step 2: Check that the UI shows appropriate error message
+    response = client.get('/')
+    assert response.status_code == 200
+    assert b'Failed to load question' not in response.data  # Error should be shown by JS
+    
+    # Step 3: Try to submit an answer with invalid data
+    response = client.post('/api/questions/1/check', json={})
+    assert response.status_code == 400
+    error_data = response.get_json()
+    assert 'error' in error_data
+    
+    # Step 4: Try to access invalid concept
+    response = client.get('/api/concepts/999999')
+    assert response.status_code == 404
+    error_data = response.get_json()
+    assert 'error' in error_data
+
+def test_concurrent_ui_sessions(client, mock_ollama_response):
+    """Test handling multiple concurrent UI sessions"""
+    # Simulate multiple users accessing the app simultaneously
+    session_1 = client.session_transaction()
+    session_2 = client.session_transaction()
+    
+    # User 1 activities
+    with session_1:
+        response = client.get('/')
+        assert response.status_code == 200
+        
+        response = client.get('/api/questions/random')
+        assert response.status_code == 200
+        question_1 = response.get_json()
+    
+    # User 2 activities
+    with session_2:
+        response = client.get('/')
+        assert response.status_code == 200
+        
+        response = client.get('/api/questions/random')
+        assert response.status_code == 200
+        question_2 = response.get_json()
+    
+    # Verify users get different questions
+    assert question_1['id'] != question_2['id']
+    
+    # Submit answers for both users
+    with session_1:
+        response = client.post(f'/api/questions/{question_1["id"]}/check',
+                             json={'answer': 0})
+        assert response.status_code == 200
+    
+    with session_2:
+        response = client.post(f'/api/questions/{question_2["id"]}/check',
+                             json={'answer': 1})
+        assert response.status_code == 200
+    
+    # Check statistics are separate
+    with session_1:
+        response = client.get('/api/stats/overview')
+        stats_1 = response.get_json()
+    
+    with session_2:
+        response = client.get('/api/stats/overview')
+        stats_2 = response.get_json()
+    
+    assert stats_1 != stats_2

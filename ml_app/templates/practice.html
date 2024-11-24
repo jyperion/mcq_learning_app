@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Practice - ML Interview Practice{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <!-- Question Section -->
+        <div class="p-6">
+            <div id="questionSection">
+                <h2 class="text-2xl font-bold mb-4">Question</h2>
+                <div id="questionText" class="text-lg mb-6"></div>
+                
+                <!-- Options -->
+                <div id="optionsSection" class="space-y-4"></div>
+                
+                <!-- Feedback Section -->
+                <div id="feedbackSection" class="mt-4 p-4 rounded-lg hidden"></div>
+                
+                <!-- Recheck Section -->
+                <div id="recheckSection" class="mt-4 hidden">
+                    <button id="recheckButton" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors">
+                        Recheck Answer
+                    </button>
+                    <div id="newAnswerSection" class="mt-4 hidden">
+                        <h4 class="text-lg font-semibold mb-2">New Answer Generated:</h4>
+                        <div id="newAnswerContent" class="p-4 bg-gray-50 rounded-lg"></div>
+                        <div class="mt-4 flex space-x-4">
+                            <button id="acceptNewAnswer" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                                Accept New Answer
+                            </button>
+                            <button id="rejectNewAnswer" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                                Keep Original
+                            </button>
+                            <button id="flagQuestion" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                                Flag Question
+                            </button>
+                            <button id="deleteQuestion" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+                                Delete Question
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Controls -->
+            <div class="mt-6 flex justify-between items-center">
+                <button id="submitAnswer" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+                    Submit Answer
+                </button>
+                <button id="nextQuestion" class="hidden bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    Next Question
+                </button>
+            </div>
+        </div>
+        
+        <!-- Progress Section -->
+        <div class="border-t border-gray-200 p-6">
+            <div id="progressSection" class="hidden">
+                <h3 class="text-xl font-semibold mb-4">Your Progress</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Score</p>
+                        <p id="score" class="text-2xl font-bold">0</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Questions Answered</p>
+                        <p id="questionsAnswered" class="text-2xl font-bold">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/practice.js') }}"></script>
+{% endblock %}

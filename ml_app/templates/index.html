@@ -36,6 +36,12 @@
             <div id="welcome" class="bg-white shadow rounded-lg p-6 mb-6">
                 <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome to ML Interview Prep!</h2>
                 <p class="text-gray-600 mb-6">Practice machine learning interview questions, track your progress, and improve your skills.</p>
+                <div class="mb-6">
+                    <label for="userName" class="block text-sm font-medium text-gray-700 mb-2">Your Name</label>
+                    <input type="text" id="userName" name="userName" 
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500 focus:border-indigo-500" 
+                           placeholder="Enter your name">
+                </div>
                 <button id="startSession" class="bg-indigo-600 text-white px-6 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-700 transform hover:scale-105 transition-all">
                     Start Practice Session
                 </button>
@@ -44,14 +50,14 @@
             <!-- Concept Selection (Initially Hidden) -->
             <div id="conceptSelection" class="hidden bg-white shadow rounded-lg p-6 mb-6">
                 <h3 class="text-xl font-bold text-gray-900 mb-4">Select a Topic</h3>
-                <div id="conceptList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div id="conceptList" class="grid grid-cols-1 gap-4">
                     <!-- Concepts will be dynamically added here -->
                 </div>
             </div>
 
             <!-- Question Section (Initially Hidden) -->
             <div id="questionSection" class="hidden">
-                <div class="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto">
+                <div class="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-xl font-bold text-gray-900">Question <span id="questionNumber">1</span></h3>
                         <div class="flex items-center space-x-2">
@@ -63,11 +69,34 @@
                     <div class="mb-6">
                         <h2 id="questionText" class="text-lg text-gray-800 leading-relaxed"></h2>
                     </div>
-                    <div id="optionsContainer" class="space-y-3">
+                    <div id="options" class="space-y-3">
                         <!-- Options will be dynamically inserted here -->
                     </div>
                     <div id="feedbackSection" class="mt-4 p-4 rounded-lg hidden">
                         <!-- Feedback will be shown here -->
+                    </div>
+                    <div id="recheckSection" class="mt-4 hidden">
+                        <button id="recheckButton" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors">
+                            Recheck Answer
+                        </button>
+                        <div id="newAnswerSection" class="mt-4 hidden">
+                            <h4 class="text-lg font-semibold mb-2">New Answer Generated:</h4>
+                            <div id="newAnswerContent" class="p-4 bg-gray-50 rounded-lg"></div>
+                            <div class="mt-4 flex space-x-4">
+                                <button id="acceptNewAnswer" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                                    Accept New Answer
+                                </button>
+                                <button id="rejectNewAnswer" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                                    Keep Original
+                                </button>
+                                <button id="flagQuestion" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                                    Flag Question
+                                </button>
+                                <button id="deleteQuestion" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+                                    Delete Question
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <div class="mt-6 flex justify-between items-center">
                         <button id="submitAnswer" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
@@ -79,19 +108,28 @@
                     </div>
                 </div>
             </div>
+        </main>
 
-            <!-- Progress Section -->
-            <div id="progressSection" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-white shadow rounded-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-900 mb-4">Overall Progress</h3>
-                    <canvas id="progressChart"></canvas>
-                </div>
-                <div class="bg-white shadow rounded-lg p-6">
-                    <h3 class="text-xl font-bold text-gray-900 mb-4">Concept Mastery</h3>
-                    <canvas id="conceptChart"></canvas>
+        <!-- Progress Section (Moved to bottom) -->
+        <div id="progressSection" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+            <div class="border-t border-gray-200 mt-8 pt-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Your Progress</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white shadow rounded-lg p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">Overall Progress</h3>
+                        <div class="aspect-w-1 aspect-h-1">
+                            <canvas id="progressChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white shadow rounded-lg p-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">Concept Mastery</h3>
+                        <div class="aspect-w-1 aspect-h-1">
+                            <canvas id="conceptChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </main>
+        </div>
     </div>
 
     <script>
@@ -105,8 +143,9 @@
         let conceptChart = null;
         let progressCtx = null;
         let conceptCtx = null;
+        let currentConceptId = null;
 
-        const API_BASE = 'http://localhost:5000/api';
+        const API_BASE = '/api';
 
         document.addEventListener('DOMContentLoaded', function() {
             progressCtx = document.getElementById('progressChart').getContext('2d');
@@ -162,118 +201,158 @@
         document.getElementById('nextQuestion').addEventListener('click', getNextQuestion);
 
         async function startSession() {
+            const nameInput = document.getElementById('userName');
+            const name = nameInput.value.trim();
+            
+            if (!name) {
+                alert('Please enter your name');
+                nameInput.focus();
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE}/session/start`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name })
                 });
+                
                 const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
-                sessionId = data.session_id;
-                document.getElementById('welcome').classList.add('hidden');
-                document.getElementById('conceptSelection').classList.remove('hidden');
-                document.getElementById('scoreDisplay').classList.remove('hidden');
-                document.getElementById('timerDisplay').classList.remove('hidden');
-                
-                // Load concepts
-                await loadConcepts();
+                if (response.ok) {
+                    sessionId = data.session_id;
+                    document.getElementById('welcome').classList.add('hidden');
+                    document.getElementById('conceptSelection').classList.remove('hidden');
+                    document.getElementById('scoreDisplay').classList.remove('hidden');
+                    document.getElementById('timerDisplay').classList.remove('hidden');
+                    loadConcepts();
+                } else {
+                    throw new Error(data.error || 'Failed to start session');
+                }
             } catch (error) {
+                console.error('Failed to start session:', error);
                 alert('Failed to start session: ' + error.message);
             }
         }
 
         async function loadConcepts() {
             try {
-                const response = await fetch(`${API_BASE}/concepts`);
+                const response = await fetch(`${API_BASE}/concepts`, {
+                    headers: { 'X-Session-ID': sessionId }
+                });
                 const concepts = await response.json();
+                
                 const conceptList = document.getElementById('conceptList');
                 conceptList.innerHTML = '';
                 
+                if (!Array.isArray(concepts)) {
+                    throw new Error('Invalid response format');
+                }
+                
                 concepts.forEach(concept => {
-                    const button = document.createElement('button');
-                    button.className = 'w-full p-4 text-left bg-gray-50 hover:bg-indigo-50 rounded-lg transition-colors';
-                    button.innerHTML = `
-                        <h4 class="font-semibold text-gray-900">${concept.name}</h4>
+                    const statusColor = {
+                        'Not started': 'bg-gray-100 text-gray-800',
+                        'Needs practice': 'bg-red-100 text-red-800',
+                        'In progress': 'bg-yellow-100 text-yellow-800',
+                        'Mastered': 'bg-green-100 text-green-800'
+                    }[concept.status || 'Not started'] || 'bg-gray-100 text-gray-800';
+                    
+                    const conceptCard = document.createElement('div');
+                    conceptCard.className = 'bg-white p-6 rounded-lg shadow-md border border-gray-200 hover:border-indigo-500 transition-colors cursor-pointer';
+                    conceptCard.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900">${concept.name}</h4>
+                                <p class="text-gray-600 mt-1">${concept.description || ''}</p>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-sm font-medium ${statusColor}">
+                                ${concept.status || 'Not started'}
+                            </span>
+                        </div>
+                        <div class="mt-4 flex items-center space-x-4">
+                            <div class="text-sm text-gray-500">
+                                Questions: ${concept.question_count || 0}
+                            </div>
+                        </div>
                     `;
-                    button.onclick = () => selectConcept(concept);
-                    conceptList.appendChild(button);
+                    conceptCard.onclick = () => selectConcept(concept.id);
+                    conceptList.appendChild(conceptCard);
                 });
+                
             } catch (error) {
+                console.error('Failed to load concepts:', error);
                 alert('Failed to load concepts: ' + error.message);
             }
         }
 
-        async function selectConcept(concept) {
-            currentConcept = concept;
-            document.getElementById('conceptSelection').classList.add('hidden');
-            document.getElementById('questionSection').classList.remove('hidden');
-            document.getElementById('progressSection').classList.remove('hidden');
-            await getNextQuestion();
-            startTimer();
+        async function selectConcept(conceptId) {
+            try {
+                const response = await fetch(`${API_BASE}/concepts/${conceptId}`);
+                const concept = await response.json();
+                
+                currentConceptId = conceptId;
+                document.getElementById('conceptSelection').classList.add('hidden');
+                document.getElementById('questionSection').classList.remove('hidden');
+                document.getElementById('progressSection').classList.remove('hidden');
+                await getNextQuestion();
+                startTimer();
+            } catch (error) {
+                console.error('Failed to select concept:', error);
+                alert('Failed to select concept: ' + error.message);
+            }
         }
 
         async function getNextQuestion() {
             try {
-                if (!currentConcept) return;
-                
-                const response = await fetch(`${API_BASE}/questions/random?concept_id=${currentConcept.id}&count=1`);
-                const questions = await response.json();
-                if (!questions || questions.length === 0) {
-                    alert('No more questions available for this concept.');
+                const response = await fetch(`${API_BASE}/questions/random?concept_id=${currentConceptId}&count=1`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch question');
+                }
+                const question = await response.json();
+                if (!question) {
+                    alert('No more questions available for this concept');
                     return;
                 }
-                
-                currentQuestion = questions[0];  
-                displayQuestion(currentQuestion);
-                document.getElementById('nextQuestion').classList.add('hidden');
-                document.getElementById('submitAnswer').classList.remove('hidden');
-                document.getElementById('feedbackSection').classList.add('hidden');
-                updateProgressBar();
+                currentQuestion = question;
+                displayQuestion(question);
                 questionNumber++;
+                document.getElementById('questionNumber').textContent = questionNumber;
             } catch (error) {
-                alert('Failed to get next question: ' + error.message);
+                console.error('Error fetching question:', error);
+                alert('Failed to fetch question: ' + error.message);
             }
         }
 
-        async function displayQuestion(question) {
-            currentQuestion = question;
-            document.getElementById('questionText').textContent = question.question;
-            const optionsContainer = document.getElementById('optionsContainer');
-            optionsContainer.innerHTML = '';
-            
-            // Reset any previous feedback
-            const feedbackSection = document.getElementById('feedbackSection');
-            feedbackSection.classList.add('hidden');
-            feedbackSection.classList.remove('bg-green-100', 'bg-red-100');
-            
-            // Create options
-            question.options.forEach((option, index) => {
-                const optionLetter = String.fromCharCode(65 + index); // Convert 0,1,2,3 to A,B,C,D
-                const optionDiv = document.createElement('div');
-                optionDiv.className = 'flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors';
-                optionDiv.innerHTML = `
-                    <input type="radio" id="option${optionLetter}" name="answer" value="${optionLetter}" class="form-radio h-4 w-4 text-indigo-600">
-                    <label for="option${optionLetter}" class="flex-grow cursor-pointer">
-                        <span class="font-medium">${optionLetter}.</span> ${option}
-                    </label>
-                `;
-                optionsContainer.appendChild(optionDiv);
-            });
-            
-            // Show submit button, hide next button
-            document.getElementById('submitAnswer').classList.remove('hidden');
-            document.getElementById('nextQuestion').classList.add('hidden');
-        }
-
-        async function submitAnswer() {
-            if (!currentQuestion) return;
-            
-            const selectedOption = document.querySelector('input[name="answer"]:checked');
-            if (!selectedOption) {
-                alert('Please select an answer');
+        function displayQuestion(question) {
+            if (!question || !question.question || !question.options) {
+                console.error('Invalid question data:', question);
                 return;
             }
+
+            document.getElementById('questionText').textContent = question.question;
+            const optionsContainer = document.getElementById('options');
+            optionsContainer.innerHTML = '';
+            
+            question.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'w-full text-left p-4 bg-white border border-gray-300 rounded-lg mb-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500';
+                button.textContent = option;
+                button.onclick = () => submitAnswer(option);
+                optionsContainer.appendChild(button);
+            });
+
+            // Reset UI state
+            document.getElementById('feedbackSection').classList.add('hidden');
+            document.getElementById('nextQuestion').classList.add('hidden');
+            
+            // Show the question section
+            document.getElementById('questionSection').classList.remove('hidden');
+            document.getElementById('conceptSelection').classList.add('hidden');
+        }
+
+        async function submitAnswer(option) {
+            if (!currentQuestion) return;
             
             try {
                 const response = await fetch(`${API_BASE}/questions/submit`, {
@@ -284,83 +363,55 @@
                     },
                     body: JSON.stringify({
                         question_id: currentQuestion.id,
-                        selected_option: selectedOption.value,
+                        selected_option: option,
+                        session_id: sessionId,
                         time_taken: seconds
                     })
                 });
                 
+                if (!response.ok) {
+                    throw new Error('Failed to submit answer');
+                }
+
                 const result = await response.json();
-                console.log('API Response:', result);
                 
-                updateScore(result.is_correct);
-                stopTimer();
+                // Update score
+                updateScore(result.isCorrect);
                 
                 // Show feedback
                 const feedbackSection = document.getElementById('feedbackSection');
-                
                 feedbackSection.innerHTML = `
-                    <div class="flex items-start space-x-3">
-                        <div class="flex-shrink-0">
-                            ${result.is_correct 
-                                ? '<svg class="h-6 w-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
-                                : '<svg class="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>'
-                            }
-                        </div>
-                        <div>
-                            <p class="font-medium">
-                                ${result.is_correct 
-                                    ? 'Correct!' 
-                                    : 'Incorrect. The correct answer is:'
-                                }
-                            </p>
-                            ${!result.is_correct 
-                                ? `<p class="mt-1"><span class="font-medium">Option ${result.correct_option}:</span> ${result.correct_answer}</p>`
-                                : ''
-                            }
-                            ${result.explanation 
-                                ? `<p class="mt-2 text-gray-600">${result.explanation}</p>`
-                                : ''
-                            }
-                        </div>
+                    <div class="${result.isCorrect ? 'bg-green-100' : 'bg-red-100'} p-4 rounded-lg">
+                        <p class="font-bold ${result.isCorrect ? 'text-green-800' : 'text-red-800'} mb-2">
+                            ${result.isCorrect ? 'Correct!' : 'Incorrect'}
+                        </p>
+                        <p class="text-gray-700">${result.explanation}</p>
                     </div>
                 `;
-                
                 feedbackSection.classList.remove('hidden');
-                feedbackSection.classList.add(result.is_correct ? 'bg-green-100' : 'bg-red-100');
                 
-                // Show progress section and update charts
-                document.getElementById('progressSection').classList.remove('hidden');
-                await updateProgress();
+                // Show next question button
+                document.getElementById('nextQuestion').classList.remove('hidden');
                 
                 // Highlight correct and incorrect options
-                document.querySelectorAll('input[name="answer"]').forEach((input, index) => {
-                    const optionDiv = input.closest('div');
-                    const optionLetter = String.fromCharCode(65 + index);
-                    const isCorrect = optionLetter === result.correct_option;
-                    const isSelected = input.value === selectedOption.value;
+                const buttons = document.querySelectorAll('#options button');
+                buttons.forEach(button => {
+                    const isCorrect = button.textContent === result.correct_option;
+                    const isSelected = button.textContent === option;
                     
                     if (isCorrect) {
-                        optionDiv.classList.add('bg-green-100');
+                        button.classList.add('bg-green-100', 'border-green-500');
                     } else if (isSelected && !isCorrect) {
-                        optionDiv.classList.add('bg-red-100');
+                        button.classList.add('bg-red-100', 'border-red-500');
                     }
                     
-                    // Disable all options
-                    input.disabled = true;
+                    button.disabled = true;
                 });
-                
-                document.getElementById('submitAnswer').classList.add('hidden');
-                document.getElementById('nextQuestion').classList.remove('hidden');
                 
             } catch (error) {
                 console.error('Submit Answer Error:', error);
                 alert('Failed to submit answer: ' + error.message);
             }
-        }
-
-        function showExplanation(result) {
-            // This function is now handled within submitAnswer
-            return;
         }
 
         function updateScore(isCorrect) {
@@ -426,16 +477,29 @@
             
             // Concept mastery chart
             const conceptStats = progress.concept_stats || [];
+            
+            // Sort concepts by priority (Not started -> Needs practice -> In progress -> Mastered)
+            const sortedStats = [...conceptStats].sort((a, b) => a.priority - b.priority);
+            
             conceptChart = new Chart(conceptCtx, {
                 type: 'radar',
                 data: {
-                    labels: conceptStats.map(stat => stat.concept),
+                    labels: sortedStats.map(stat => stat.name),
                     datasets: [{
                         label: 'Concept Mastery',
-                        data: conceptStats.map(stat => stat.accuracy),
+                        data: sortedStats.map(stat => stat.accuracy || 0),
                         backgroundColor: 'rgba(79, 70, 229, 0.2)',
                         borderColor: 'rgb(79, 70, 229)',
-                        pointBackgroundColor: 'rgb(79, 70, 229)'
+                        pointBackgroundColor: sortedStats.map(stat => {
+                            switch(stat.status) {
+                                case 'Mastered': return 'rgb(34, 197, 94)';  // green
+                                case 'In progress': return 'rgb(234, 179, 8)';  // yellow
+                                case 'Needs practice': return 'rgb(239, 68, 68)';  // red
+                                default: return 'rgb(156, 163, 175)';  // gray
+                            }
+                        }),
+                        pointRadius: 4,
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
@@ -452,6 +516,18 @@
                     plugins: {
                         legend: {
                             position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const stat = sortedStats[context.dataIndex];
+                                    return [
+                                        `Status: ${stat.status}`,
+                                        `Accuracy: ${stat.accuracy || 0}%`,
+                                        `Progress: ${stat.attempted}/${stat.total_questions} questions`
+                                    ];
+                                }
+                            }
                         }
                     }
                 }

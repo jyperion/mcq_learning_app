@@ -259,8 +259,6 @@ def get_user_progress():
             return jsonify({"error": "Session ID required"}), 400
         
         db = get_db()
-        
-        # Get user ID from session
         user = db.execute(
             'SELECT * FROM users WHERE session_id = ?',
             (session_id,)
@@ -280,21 +278,50 @@ def get_user_progress():
             WHERE user_id = ?
         ''', (user['id'],)).fetchone()
         
-        # Get concept-wise stats
+        # Get concept-wise stats with recommendations
         concept_stats = db.execute('''
+            WITH concept_progress AS (
+                SELECT 
+                    c.id,
+                    c.name,
+                    c.description,
+                    COUNT(DISTINCT q.id) as total_questions,
+                    COUNT(DISTINCT up.question_id) as attempted,
+                    SUM(CASE WHEN up.is_correct THEN 1 ELSE 0 END) as correct
+                FROM concepts c
+                LEFT JOIN concept_questions cq ON c.id = cq.concept_id
+                LEFT JOIN questions q ON cq.question_id = q.id
+                LEFT JOIN user_progress up ON q.id = up.question_id AND up.user_id = ?
+                GROUP BY c.id
+            )
             SELECT 
-                c.name,
-                COUNT(*) as attempted,
-                SUM(CASE WHEN up.is_correct THEN 1 ELSE 0 END) as correct
-            FROM user_progress up
-            JOIN questions q ON up.question_id = q.id
-            JOIN concept_questions cq ON q.id = cq.question_id
-            JOIN concepts c ON cq.concept_id = c.id
-            WHERE up.user_id = ?
-            GROUP BY c.id
+                id,
+                name,
+                description,
+                total_questions,
+                attempted,
+                correct,
+                CASE 
+                    WHEN attempted = 0 THEN 'Not started'
+                    WHEN correct * 100.0 / attempted >= 80 THEN 'Mastered'
+                    WHEN correct * 100.0 / attempted >= 50 THEN 'In progress'
+                    ELSE 'Needs practice'
+                END as status,
+                CASE
+                    WHEN attempted = 0 THEN 1
+                    WHEN correct * 100.0 / attempted < 50 THEN 2
+                    WHEN correct * 100.0 / attempted < 80 THEN 3
+                    ELSE 4
+                END as priority
+            FROM concept_progress
+            ORDER BY priority ASC, name ASC
         ''', (user['id'],)).fetchall()
         
         return jsonify({
+            'user': {
+                'name': user['name'],
+                'session_id': user['session_id']
+            },
             'overall_stats': {
                 'total_questions': stats['total_questions'],
                 'correct_answers': stats['correct_answers'],
@@ -302,39 +329,62 @@ def get_user_progress():
                 'avg_time': round(stats['avg_time'], 2) if stats['avg_time'] is not None else 0
             },
             'concept_stats': [{
-                'concept': stat['name'],
+                'id': stat['id'],
+                'name': stat['name'],
+                'description': stat['description'],
+                'total_questions': stat['total_questions'],
                 'attempted': stat['attempted'],
                 'correct': stat['correct'],
-                'accuracy': round((stat['correct'] / stat['attempted']) * 100, 2) if stat['attempted'] > 0 else 0
+                'accuracy': round((stat['correct'] / stat['attempted']) * 100, 2) if stat['attempted'] > 0 else 0,
+                'status': stat['status'],
+                'priority': stat['priority']
             } for stat in concept_stats]
         })
     except Exception as e:
+        current_app.logger.error(f"Error in get_user_progress: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @bp.route('/session/start', methods=['POST'])
 def start_session():
     """Start a new user session."""
     try:
+        current_app.logger.debug("Starting new session")
+        data = request.get_json()
+        if not data:
+            current_app.logger.error("No JSON data received")
+            return jsonify({"error": "No JSON data received"}), 400
+            
+        if 'name' not in data:
+            current_app.logger.error("Name field missing from request")
+            return jsonify({"error": "Name is required"}), 400
+            
         session_id = str(uuid.uuid4())
-        db = get_db()
+        current_app.logger.debug(f"Generated session ID: {session_id}")
         
-        cursor = db.execute(
-            'INSERT INTO users (session_id) VALUES (?)',
-            (session_id,)
-        )
-        user_id = cursor.lastrowid
-        
-        # Create a new session
-        db.execute('''
-            INSERT INTO user_sessions (user_id)
-            VALUES (?)
-        ''', (user_id,))
-        
-        db.commit()
-        
-        return jsonify({
-            'session_id': session_id,
-            'message': 'New session started'
-        })
+        try:
+            db = get_db()
+            current_app.logger.debug("Got database connection")
+            
+            cursor = db.execute(
+                'INSERT INTO users (name, session_id) VALUES (?, ?)',
+                (data['name'], session_id)
+            )
+            user_id = cursor.lastrowid
+            current_app.logger.debug(f"Inserted user with ID: {user_id}")
+            
+            db.commit()
+            current_app.logger.debug("Committed database transaction")
+            
+            return jsonify({
+                "session_id": session_id,
+                "user_id": user_id,
+                "name": data['name']
+            })
+            
+        except sqlite3.Error as e:
+            current_app.logger.error(f"Database error in start_session: {str(e)}")
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
+            
     except Exception as e:
+        current_app.logger.error(f"Error in start_session: {str(e)}")
         return jsonify({"error": str(e)}), 500

@@ -1,0 +1,6 @@
+-r base.txt
+
+gunicorn>=20.1.0
+psycopg2-binary>=2.9.0  # For PostgreSQL support
+redis>=4.0.0  # For caching
+sentry-sdk>=1.0.0  # For error tracking

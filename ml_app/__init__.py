@@ -1,11 +1,32 @@
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 from flask_cors import CORS
 
 def create_app(test_config=None):
     """Create and configure the Flask application"""
     app = Flask(__name__, instance_relative_config=True)
-    CORS(app)  # Enable CORS for all routes
+    
+    # Configure CORS
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "expose_headers": ["Content-Type", "Authorization"]
+        }
+    })
+    
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+    
+    # Configure logging
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    app.logger.setLevel(logging.DEBUG)
     
     # Ensure the instance folder exists
     try:
@@ -49,12 +70,29 @@ def create_app(test_config=None):
     db.init_app(app)
     
     # Register blueprints
-    from .api import bp as api_bp
-    app.register_blueprint(api_bp)
-
     from . import routes
     app.register_blueprint(routes.bp)
 
+    from .api import sessions, questions, concepts, practice, stats
+    app.register_blueprint(sessions.bp, url_prefix='/api/session')
+    app.register_blueprint(questions.bp, url_prefix='/api/questions')
+    app.register_blueprint(concepts.bp, url_prefix='/api/concepts')
+    app.register_blueprint(practice.bp, url_prefix='/api/practice')
+    app.register_blueprint(stats.bp, url_prefix='/api/stats')
+
+    # Register main routes
+    @app.route('/')
+    def index():
+        return render_template('practice.html')
+
+    @app.route('/stats')
+    def stats():
+        return render_template('stats.html')
+
+    @app.route('/concepts')
+    def concepts():
+        return render_template('concepts.html')
+    
     # Initialize database and questions if running with the Flask CLI
     if os.environ.get('FLASK_RUN_FROM_CLI'):
         with app.app_context():

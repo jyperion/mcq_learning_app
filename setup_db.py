@@ -32,7 +32,7 @@ def database_exists(app):
         print(f"Error checking database: {str(e)}")
         return False
 
-def load_questions(app):
+def load_questions():
     """Load questions from JSON file into database."""
     print("Loading questions from JSON file...")
     # Read questions from JSON file
@@ -64,7 +64,7 @@ def load_questions(app):
                 # Insert question
                 cursor = db.execute('''
                     INSERT INTO questions 
-                    (question, options, correct, explanation)
+                    (question, options, correct_option, explanation)
                     VALUES (?, ?, ?, ?)
                 ''', (
                     question['question'],
@@ -120,10 +120,6 @@ if __name__ == '__main__':
     app = create_app()
     
     with app.app_context():
-        if not database_exists(app):
             print("Initializing empty database")
             init_db()
-            load_questions(app)
-        else:
-            print("Database already exists with questions loaded. Skipping initialization.")
-            print("To force reinitialization, delete the database file and run this script again.")
+            load_questions()
