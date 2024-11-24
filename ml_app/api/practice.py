@@ -53,6 +53,10 @@ def get_question():
 @bp.route('/answer', methods=['POST'])
 def submit_answer():
     """Submit an answer for a question"""
+    session_id = request.headers.get('X-Session-ID')
+    if not session_id:
+        return jsonify({'error': 'Session ID is required'}), 401
+        
     data = request.get_json()
     if not data or 'questionId' not in data or 'answer' not in data:
         return jsonify({'error': 'Missing required fields'}), 400
@@ -74,11 +78,11 @@ def submit_answer():
         
         is_correct = user_answer == question['correct_answer']
         
-        # Record answer
+        # Record answer with session ID
         db.execute(
-            'INSERT INTO user_answers (question_id, answer, is_correct, time_taken, timestamp) '
-            'VALUES (?, ?, ?, ?, ?)',
-            (question_id, user_answer, is_correct, time_taken, datetime.now())
+            'INSERT INTO user_answers (question_id, session_id, answer, is_correct, time_taken, timestamp) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            (question_id, session_id, user_answer, is_correct, time_taken, datetime.now())
         )
         db.commit()
         
@@ -137,3 +141,68 @@ def submit_feedback():
     except Exception as e:
         current_app.logger.error(f"Error submitting feedback: {str(e)}")
         return jsonify({'error': 'Failed to submit feedback'}), 500
+
+@bp.route('/progress', methods=['GET'])
+def get_progress():
+    """Get user's progress statistics"""
+    db = get_db()
+    try:
+        # Get overall statistics
+        overall_stats = db.execute('''
+            SELECT 
+                COUNT(*) as total_questions,
+                SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_answers,
+                ROUND(AVG(time_taken)) as avg_time,
+                ROUND(AVG(CASE WHEN is_correct THEN 100.0 ELSE 0 END)) as accuracy
+            FROM user_answers
+        ''').fetchone()
+        
+        # Get concept-wise statistics
+        concept_stats = db.execute('''
+            WITH concept_answers AS (
+                SELECT 
+                    c.id,
+                    c.name,
+                    COUNT(ua.id) as attempted,
+                    SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) as correct,
+                    COUNT(q.id) as total_questions
+                FROM concepts c
+                LEFT JOIN question_concepts qc ON c.id = qc.concept_id
+                LEFT JOIN questions q ON qc.question_id = q.id
+                LEFT JOIN user_answers ua ON q.id = ua.question_id
+                GROUP BY c.id, c.name
+            )
+            SELECT 
+                id,
+                name,
+                attempted,
+                correct,
+                total_questions,
+                CASE 
+                    WHEN attempted = 0 THEN 0 
+                    ELSE ROUND((correct * 100.0) / attempted)
+                END as accuracy,
+                CASE
+                    WHEN attempted = 0 THEN 'Not started'
+                    WHEN (correct * 100.0) / attempted >= 80 THEN 'Mastered'
+                    WHEN (correct * 100.0) / attempted >= 50 THEN 'In progress'
+                    ELSE 'Needs practice'
+                END as status,
+                CASE
+                    WHEN attempted = 0 THEN 1
+                    WHEN (correct * 100.0) / attempted >= 80 THEN 4
+                    WHEN (correct * 100.0) / attempted >= 50 THEN 3
+                    ELSE 2
+                END as priority
+            FROM concept_answers
+            ORDER BY priority DESC, accuracy DESC
+        ''').fetchall()
+        
+        return jsonify({
+            'overall_stats': dict(overall_stats) if overall_stats else {},
+            'concept_stats': [dict(stat) for stat in concept_stats] if concept_stats else []
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting progress: {str(e)}")
+        return jsonify({'error': 'Failed to get progress'}), 500

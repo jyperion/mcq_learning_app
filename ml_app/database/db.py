@@ -237,34 +237,38 @@ def get_concept(concept_id):
         concept['prerequisites'] = concept['prerequisites'].split(',') if concept['prerequisites'] else []
     return concept
 
-def create_session(concept_id=None):
+def create_session(user_name):
     """Create a new practice session"""
+    if not user_name:
+        raise ValueError("User name is required")
+        
     db = get_db()
-    cursor = db.cursor()
     try:
-        cursor.execute(
-            'INSERT INTO practice_sessions (concept_id, start_time) VALUES (?, CURRENT_TIMESTAMP)',
-            (concept_id,)
+        cursor = db.execute(
+            'INSERT INTO sessions (user_name) VALUES (?)',
+            (user_name,)
         )
+        session_id = cursor.lastrowid
         db.commit()
-        return cursor.lastrowid
+        current_app.logger.info(f"Created new session {session_id} for user {user_name}")
+        return session_id
     except Exception as e:
-        db.rollback()
-        raise e
+        current_app.logger.error(f"Failed to create session: {str(e)}")
+        raise
 
 def end_session(session_id):
     """End a practice session"""
     db = get_db()
-    cursor = db.cursor()
     try:
-        cursor.execute(
-            'UPDATE practice_sessions SET end_time = CURRENT_TIMESTAMP WHERE id = ?',
-            (session_id,)
+        db.execute(
+            'UPDATE sessions SET end_time = ?, status = ? WHERE id = ?',
+            (datetime.now(), 'completed', session_id)
         )
         db.commit()
+        current_app.logger.info(f"Ended session {session_id}")
     except Exception as e:
-        db.rollback()
-        raise e
+        current_app.logger.error(f"Failed to end session: {str(e)}")
+        raise
 
 def update_session_progress(session_id, question_id, is_correct, time_spent):
     """Update session progress with a new answer"""

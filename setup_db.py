@@ -61,26 +61,31 @@ def load_questions():
             
             # Add questions for this concept
             for question in concept_data['questions']:
+                # Convert options list to pipe-separated string
+                options_str = '|'.join(question['options'])
+                
                 # Insert question
                 cursor = db.execute('''
                     INSERT INTO questions 
-                    (question, options, correct_option, explanation)
-                    VALUES (?, ?, ?, ?)
+                    (text, options, correct_answer, explanation, difficulty, hint)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
                     question['question'],
-                    json.dumps(question['options']),
+                    options_str,
                     question['correct'],
-                    question['explanation']
+                    question.get('explanation', ''),
+                    question.get('difficulty', 'medium'),
+                    question.get('hint', '')
                 ))
                 question_id = cursor.lastrowid
                 question_count += 1
                 
                 # Link question to concept
                 db.execute('''
-                    INSERT INTO concept_questions 
-                    (concept_id, question_id)
+                    INSERT INTO question_concepts 
+                    (question_id, concept_id)
                     VALUES (?, ?)
-                ''', (concept_id, question_id))
+                ''', (question_id, concept_id))
                 
                 if question_count % 10 == 0:
                     print(f"Loaded {question_count} questions...")
@@ -89,37 +94,35 @@ def load_questions():
         db.commit()
         
         # Verify the data was loaded
-        cursor = db.execute('SELECT COUNT(*) as count FROM concepts')
-        final_concept_count = cursor.fetchone()['count']
+        cursor = db.execute('SELECT COUNT(*) FROM concepts')
+        final_concept_count = cursor.fetchone()[0]
         
-        cursor = db.execute('SELECT COUNT(*) as count FROM questions')
-        final_question_count = cursor.fetchone()['count']
+        cursor = db.execute('SELECT COUNT(*) FROM questions')
+        final_question_count = cursor.fetchone()[0]
         
         print("\nVerification:")
         print(f"- Concepts in database: {final_concept_count}")
         print(f"- Questions in database: {final_question_count}")
         
-        if final_concept_count == concept_count and final_question_count == question_count:
-            print("\nSuccessfully loaded all concepts and questions!")
-            print("\nSummary:")
-            print(f"- Loaded {concept_count} concepts")
-            print(f"- Loaded {question_count} questions")
-            print("\nDatabase setup complete!")
-        else:
-            print("\nWarning: Mismatch in loaded data!")
-            print(f"Expected: {concept_count} concepts, {question_count} questions")
-            print(f"Found: {final_concept_count} concepts, {final_question_count} questions")
+        return True
         
     except Exception as e:
+        print(f"Error loading data: {str(e)}")
         db.rollback()
-        print(f"Error loading questions: {str(e)}")
-        raise
+        return False
 
 if __name__ == '__main__':
     # Create Flask app
     app = create_app()
     
     with app.app_context():
-            print("Initializing empty database")
+        # Check if database already exists and has data
+        if database_exists(app):
+            print("Database already exists with data")
+        else:
+            print("Initializing database...")
             init_db()
-            load_questions()
+            if load_questions():
+                print("Successfully loaded questions into database")
+            else:
+                print("Failed to load questions into database")

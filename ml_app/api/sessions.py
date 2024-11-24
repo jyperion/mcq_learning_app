@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app, make_response
 from ..database import db
 
-bp = Blueprint('sessions', __name__)
+bp = Blueprint('sessions', __name__, url_prefix='/api/session')
 
 @bp.route('/start', methods=['POST', 'OPTIONS'])
 def start_session():
@@ -15,11 +15,13 @@ def start_session():
 
     try:
         data = request.get_json() or {}
-        concept_id = data.get('conceptId')
-        
-        session_id = db.create_session(concept_id)
+        name = data.get('name')
+        if not name:
+            return jsonify({'error': 'Name is required'}), 400
+            
+        session_id = db.create_session(name)
         response = jsonify({
-            'sessionId': session_id,
+            'session_id': session_id,
             'message': 'Session started successfully'
         })
         response.headers.add('Access-Control-Allow-Origin', '*')

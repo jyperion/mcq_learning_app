@@ -1,83 +1,47 @@
--- Drop tables in reverse dependency order
-DROP TABLE IF EXISTS user_answers;
-DROP TABLE IF EXISTS practice_sessions;
-DROP TABLE IF EXISTS concept_questions;
-DROP TABLE IF EXISTS concept_prerequisites;
-DROP TABLE IF EXISTS concept_topics;
+-- Initialize the database
 DROP TABLE IF EXISTS questions;
 DROP TABLE IF EXISTS concepts;
-DROP TABLE IF EXISTS topics;
-DROP TABLE IF EXISTS user_progress;
-DROP TABLE IF EXISTS user_sessions;
-DROP TABLE IF EXISTS users;
-
--- Create tables in dependency order
--- Create topics table
-CREATE TABLE topics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+DROP TABLE IF EXISTS question_concepts;
+DROP TABLE IF EXISTS user_answers;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS question_feedback;
 
 -- Create concepts table
 CREATE TABLE concepts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     description TEXT,
-    difficulty TEXT CHECK(difficulty IN ('beginner', 'intermediate', 'advanced')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create concept_topics table
-CREATE TABLE concept_topics (
-    concept_id INTEGER,
-    topic_id INTEGER,
-    PRIMARY KEY (concept_id, topic_id),
-    FOREIGN KEY (concept_id) REFERENCES concepts (id) ON DELETE CASCADE,
-    FOREIGN KEY (topic_id) REFERENCES topics (id) ON DELETE CASCADE
-);
-
--- Create concept prerequisites table
-CREATE TABLE concept_prerequisites (
-    concept_id INTEGER,
-    prerequisite_id INTEGER,
-    PRIMARY KEY (concept_id, prerequisite_id),
-    FOREIGN KEY (concept_id) REFERENCES concepts (id) ON DELETE CASCADE,
-    FOREIGN KEY (prerequisite_id) REFERENCES concepts (id) ON DELETE CASCADE
 );
 
 -- Create questions table
 CREATE TABLE questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    question TEXT NOT NULL,
-    options TEXT NOT NULL, -- JSON array of options
-    correct_option TEXT NOT NULL,
+    text TEXT NOT NULL,
+    options TEXT NOT NULL,  -- Pipe-separated options
+    correct_answer TEXT NOT NULL,
     explanation TEXT,
-    difficulty TEXT CHECK(difficulty IN ('beginner', 'intermediate', 'advanced')),
-    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'flagged', 'deleted')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    difficulty TEXT CHECK(difficulty IN ('easy', 'medium', 'hard')),
+    hint TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create concept_questions table
-CREATE TABLE concept_questions (
-    concept_id INTEGER,
+-- Create question_concepts junction table
+CREATE TABLE question_concepts (
     question_id INTEGER,
-    PRIMARY KEY (concept_id, question_id),
-    FOREIGN KEY (concept_id) REFERENCES concepts (id) ON DELETE CASCADE,
-    FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
+    concept_id INTEGER,
+    PRIMARY KEY (question_id, concept_id),
+    FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE,
+    FOREIGN KEY (concept_id) REFERENCES concepts (id) ON DELETE CASCADE
 );
 
--- Create practice_sessions table
-CREATE TABLE practice_sessions (
+-- Create sessions table
+CREATE TABLE sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    concept_id INTEGER,
-    start_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_name TEXT NOT NULL,
+    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP,
-    questions_answered INTEGER DEFAULT 0,
-    correct_answers INTEGER DEFAULT 0,
-    total_time INTEGER DEFAULT 0, -- in seconds
-    FOREIGN KEY (concept_id) REFERENCES concepts (id) ON DELETE SET NULL
+    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed', 'abandoned'))
 );
 
 -- Create user_answers table
@@ -85,19 +49,40 @@ CREATE TABLE user_answers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
     question_id INTEGER NOT NULL,
+    answer TEXT NOT NULL,
     is_correct BOOLEAN NOT NULL,
-    time_spent INTEGER NOT NULL, -- in seconds
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES practice_sessions (id) ON DELETE CASCADE,
+    time_taken INTEGER NOT NULL,  -- in seconds
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE,
     FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
 );
 
--- Create indices for better query performance
-CREATE INDEX idx_concept_topics_concept ON concept_topics(concept_id);
-CREATE INDEX idx_concept_topics_topic ON concept_topics(topic_id);
-CREATE INDEX idx_concept_prerequisites_concept ON concept_prerequisites(concept_id);
-CREATE INDEX idx_concept_prerequisites_prereq ON concept_prerequisites(prerequisite_id);
-CREATE INDEX idx_concept_questions_concept ON concept_questions(concept_id);
-CREATE INDEX idx_concept_questions_question ON concept_questions(question_id);
+-- Create question_feedback table
+CREATE TABLE question_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    question_id INTEGER NOT NULL,
+    feedback TEXT NOT NULL,
+    type TEXT DEFAULT 'general' CHECK(type IN ('general', 'error', 'improvement', 'flag')),
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
+);
+
+-- Create indexes
+CREATE INDEX idx_question_concepts_concept ON question_concepts(concept_id);
+CREATE INDEX idx_question_concepts_question ON question_concepts(question_id);
 CREATE INDEX idx_user_answers_session ON user_answers(session_id);
 CREATE INDEX idx_user_answers_question ON user_answers(question_id);
+CREATE INDEX idx_question_feedback_question ON question_feedback(question_id);
+
+-- Insert some initial concepts
+INSERT INTO concepts (name, description) VALUES
+    ('Machine Learning Basics', 'Fundamental concepts of machine learning'),
+    ('Deep Learning', 'Neural networks and deep learning architectures'),
+    ('Natural Language Processing', 'Text processing and language models'),
+    ('Computer Vision', 'Image processing and visual recognition'),
+    ('Model Evaluation', 'Metrics and validation techniques'),
+    ('Feature Engineering', 'Data preprocessing and feature creation'),
+    ('Model Deployment', 'Production deployment and MLOps'),
+    ('Time Series', 'Time series analysis and forecasting'),
+    ('Reinforcement Learning', 'Agent-based learning and optimization'),
+    ('Statistical Learning', 'Statistical methods in machine learning');

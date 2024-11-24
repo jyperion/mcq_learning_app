@@ -61,6 +61,11 @@
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-xl font-bold text-gray-900">Question <span id="questionNumber">1</span></h3>
                         <div class="flex items-center space-x-2">
+                            <button id="hintButton" class="hidden text-indigo-600 hover:text-indigo-800">
+                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </button>
                             <div class="h-2 w-48 bg-gray-200 rounded-full">
                                 <div id="progressBar" class="h-2 bg-green-500 rounded-full" style="width: 0%"></div>
                             </div>
@@ -72,38 +77,32 @@
                     <div id="options" class="space-y-3">
                         <!-- Options will be dynamically inserted here -->
                     </div>
-                    <div id="feedbackSection" class="mt-4 p-4 rounded-lg hidden">
-                        <!-- Feedback will be shown here -->
+                    <div id="explanation" class="mt-4 p-4 bg-gray-50 rounded-lg hidden">
+                        <!-- Explanation will be shown here -->
                     </div>
-                    <div id="recheckSection" class="mt-4 hidden">
-                        <button id="recheckButton" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors">
-                            Recheck Answer
-                        </button>
-                        <div id="newAnswerSection" class="mt-4 hidden">
-                            <h4 class="text-lg font-semibold mb-2">New Answer Generated:</h4>
-                            <div id="newAnswerContent" class="p-4 bg-gray-50 rounded-lg"></div>
-                            <div class="mt-4 flex space-x-4">
-                                <button id="acceptNewAnswer" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
-                                    Accept New Answer
-                                </button>
-                                <button id="rejectNewAnswer" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
-                                    Keep Original
-                                </button>
-                                <button id="flagQuestion" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
-                                    Flag Question
-                                </button>
-                                <button id="deleteQuestion" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
-                                    Delete Question
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-6 flex justify-between items-center">
-                        <button id="submitAnswer" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-                            Submit Answer
-                        </button>
-                        <button id="nextQuestion" class="hidden bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    <div class="mt-6 flex justify-end space-x-4">
+                        <button id="nextButton" class="hidden bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
                             Next Question
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hint Modal -->
+            <div id="hintModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                <div class="bg-white p-6 rounded-lg max-w-lg w-full mx-4">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-lg font-bold">Hint</h3>
+                        <button onclick="document.getElementById('hintModal').classList.add('hidden')" class="text-gray-500 hover:text-gray-700">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <p id="hintText" class="text-gray-700"></p>
+                    <div class="mt-6 flex justify-end">
+                        <button onclick="document.getElementById('hintModal').classList.add('hidden')" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                            Got it
                         </button>
                     </div>
                 </div>
@@ -148,6 +147,9 @@
         const API_BASE = '/api';
 
         document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('startSession').addEventListener('click', startSession);
+            document.getElementById('nextButton').addEventListener('click', getNextQuestion);
+            
             progressCtx = document.getElementById('progressChart').getContext('2d');
             conceptCtx = document.getElementById('conceptChart').getContext('2d');
             
@@ -196,9 +198,17 @@
         });
 
         // Event Listeners
-        document.getElementById('startSession').addEventListener('click', startSession);
-        document.getElementById('submitAnswer').addEventListener('click', submitAnswer);
-        document.getElementById('nextQuestion').addEventListener('click', getNextQuestion);
+        document.getElementById('options').addEventListener('click', function(e) {
+            const optionButton = e.target.closest('.option-button');
+            if (optionButton) {
+                // Remove selected class from all options
+                document.querySelectorAll('.option-button').forEach(button => {
+                    button.classList.remove('selected', 'bg-indigo-100', 'border-indigo-500');
+                });
+                // Add selected class to clicked option
+                optionButton.classList.add('selected', 'bg-indigo-100', 'border-indigo-500');
+            }
+        });
 
         async function startSession() {
             const nameInput = document.getElementById('userName');
@@ -305,17 +315,19 @@
 
         async function getNextQuestion() {
             try {
-                const response = await fetch(`${API_BASE}/questions/random?concept_id=${currentConceptId}&count=1`);
+                const response = await fetch(`${API_BASE}/questions/random?concept_id=${currentConceptId}&count=1`, {
+                    headers: { 'X-Session-ID': sessionId }
+                });
                 if (!response.ok) {
                     throw new Error('Failed to fetch question');
                 }
-                const question = await response.json();
-                if (!question) {
+                const questions = await response.json();
+                if (!questions || questions.length === 0) {
                     alert('No more questions available for this concept');
                     return;
                 }
-                currentQuestion = question;
-                displayQuestion(question);
+                currentQuestion = questions[0]; // API now returns an array
+                displayQuestion(currentQuestion);
                 questionNumber++;
                 document.getElementById('questionNumber').textContent = questionNumber;
             } catch (error) {
@@ -325,91 +337,98 @@
         }
 
         function displayQuestion(question) {
-            if (!question || !question.question || !question.options) {
+            if (!question || !question.text || !question.options) {
                 console.error('Invalid question data:', question);
                 return;
             }
 
-            document.getElementById('questionText').textContent = question.question;
+            document.getElementById('questionText').textContent = question.text;
             const optionsContainer = document.getElementById('options');
             optionsContainer.innerHTML = '';
             
             question.options.forEach((option, index) => {
                 const button = document.createElement('button');
-                button.className = 'w-full text-left p-4 bg-white border border-gray-300 rounded-lg mb-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500';
+                button.className = 'option-button w-full text-left p-4 rounded-lg border border-gray-200 hover:border-indigo-500 mb-3 transition-colors';
                 button.textContent = option;
                 button.onclick = () => submitAnswer(option);
                 optionsContainer.appendChild(button);
             });
 
+            // Show hint button if available
+            const hintButton = document.getElementById('hintButton');
+            if (question.hint) {
+                hintButton.classList.remove('hidden');
+                hintButton.onclick = () => {
+                    document.getElementById('hintText').textContent = question.hint;
+                    document.getElementById('hintModal').classList.remove('hidden');
+                };
+            } else {
+                hintButton.classList.add('hidden');
+            }
+
             // Reset UI state
-            document.getElementById('feedbackSection').classList.add('hidden');
-            document.getElementById('nextQuestion').classList.add('hidden');
-            
-            // Show the question section
-            document.getElementById('questionSection').classList.remove('hidden');
-            document.getElementById('conceptSelection').classList.add('hidden');
+            document.querySelectorAll('.option-button').forEach(btn => {
+                btn.disabled = false;
+                btn.classList.remove('correct', 'incorrect');
+            });
+            document.getElementById('explanation').textContent = '';
+            document.getElementById('explanation').classList.add('hidden');
+            document.getElementById('nextButton').classList.add('hidden');
         }
 
-        async function submitAnswer(option) {
+        async function submitAnswer(selectedAnswer) {
             if (!currentQuestion) return;
             
+            // Disable all option buttons
+            document.querySelectorAll('.option-button').forEach(btn => {
+                btn.disabled = true;
+            });
+            
             try {
-                const response = await fetch(`${API_BASE}/questions/submit`, {
+                const timeTaken = stopTimer();
+                const response = await fetch(`${API_BASE}/questions/${currentQuestion.id}/answer`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-Session-ID': sessionId
                     },
                     body: JSON.stringify({
-                        question_id: currentQuestion.id,
-                        selected_option: option,
-                        session_id: sessionId,
-                        time_taken: seconds
+                        answer: selectedAnswer,
+                        time_taken: timeTaken
                     })
                 });
                 
                 if (!response.ok) {
                     throw new Error('Failed to submit answer');
                 }
-
+                
                 const result = await response.json();
                 
-                // Update score
-                updateScore(result.isCorrect);
-                
-                // Show feedback
-                const feedbackSection = document.getElementById('feedbackSection');
-                feedbackSection.innerHTML = `
-                    <div class="${result.isCorrect ? 'bg-green-100' : 'bg-red-100'} p-4 rounded-lg">
-                        <p class="font-bold ${result.isCorrect ? 'text-green-800' : 'text-red-800'} mb-2">
-                            ${result.isCorrect ? 'Correct!' : 'Incorrect'}
-                        </p>
-                        <p class="text-gray-700">${result.explanation}</p>
-                    </div>
-                `;
-                feedbackSection.classList.remove('hidden');
-                
-                // Show next question button
-                document.getElementById('nextQuestion').classList.remove('hidden');
-                
-                // Highlight correct and incorrect options
-                const buttons = document.querySelectorAll('#options button');
-                buttons.forEach(button => {
-                    const isCorrect = button.textContent === result.correct_option;
-                    const isSelected = button.textContent === option;
-                    
-                    if (isCorrect) {
-                        button.classList.add('bg-green-100', 'border-green-500');
-                    } else if (isSelected && !isCorrect) {
-                        button.classList.add('bg-red-100', 'border-red-500');
+                // Highlight correct/incorrect answers
+                document.querySelectorAll('.option-button').forEach(btn => {
+                    if (btn.textContent === selectedAnswer) {
+                        btn.classList.add(result.correct ? 'correct' : 'incorrect');
                     }
-                    
-                    button.disabled = true;
+                    if (btn.textContent === result.correct_answer) {
+                        btn.classList.add('correct');
+                    }
                 });
                 
+                // Show explanation
+                if (currentQuestion.explanation) {
+                    document.getElementById('explanation').textContent = currentQuestion.explanation;
+                    document.getElementById('explanation').classList.remove('hidden');
+                }
+                
+                // Show next button
+                document.getElementById('nextButton').classList.remove('hidden');
+                
+                // Update progress
+                updateScore(result.correct);
+                await updateProgress();
+                
             } catch (error) {
-                console.error('Submit Answer Error:', error);
+                console.error('Error submitting answer:', error);
                 alert('Failed to submit answer: ' + error.message);
             }
         }
@@ -430,30 +449,41 @@
 
         async function updateProgress() {
             try {
-                const response = await fetch(`${API_BASE}/progress`, {
+                const response = await fetch(`${API_BASE}/practice/progress`, {
                     headers: { 'X-Session-ID': sessionId }
                 });
+                if (!response.ok) throw new Error('Failed to fetch progress');
                 const progress = await response.json();
                 updateCharts(progress);
+                
+                // Show progress section once we have data
+                document.getElementById('progressSection').classList.remove('hidden');
             } catch (error) {
                 console.error('Failed to update progress:', error);
             }
         }
 
         function updateCharts(progress) {
+            // Ensure we have valid progress data
+            const overallStats = progress.overall_stats || {};
+            const conceptStats = progress.concept_stats || [];
+            
+            // Destroy existing charts if they exist
             if (progressChart) progressChart.destroy();
             if (conceptChart) conceptChart.destroy();
             
             // Overall progress chart
-            const overallStats = progress.overall_stats || {};
+            const totalQuestions = overallStats.total_questions || 0;
+            const correctAnswers = overallStats.correct_answers || 0;
+            
             progressChart = new Chart(progressCtx, {
                 type: 'doughnut',
                 data: {
                     labels: ['Correct', 'Incorrect'],
                     datasets: [{
                         data: [
-                            overallStats.correct_answers || 0,
-                            (overallStats.total_questions || 0) - (overallStats.correct_answers || 0)
+                            correctAnswers,
+                            Math.max(0, totalQuestions - correctAnswers)  // Ensure non-negative
                         ],
                         backgroundColor: [
                             'rgb(34, 197, 94)',  // green-500
@@ -469,63 +499,18 @@
                         },
                         title: {
                             display: true,
-                            text: `Overall Accuracy: ${overallStats.accuracy || 0}%`
-                        }
-                    }
-                }
-            });
-            
-            // Concept mastery chart
-            const conceptStats = progress.concept_stats || [];
-            
-            // Sort concepts by priority (Not started -> Needs practice -> In progress -> Mastered)
-            const sortedStats = [...conceptStats].sort((a, b) => a.priority - b.priority);
-            
-            conceptChart = new Chart(conceptCtx, {
-                type: 'radar',
-                data: {
-                    labels: sortedStats.map(stat => stat.name),
-                    datasets: [{
-                        label: 'Concept Mastery',
-                        data: sortedStats.map(stat => stat.accuracy || 0),
-                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                        borderColor: 'rgb(79, 70, 229)',
-                        pointBackgroundColor: sortedStats.map(stat => {
-                            switch(stat.status) {
-                                case 'Mastered': return 'rgb(34, 197, 94)';  // green
-                                case 'In progress': return 'rgb(234, 179, 8)';  // yellow
-                                case 'Needs practice': return 'rgb(239, 68, 68)';  // red
-                                default: return 'rgb(156, 163, 175)';  // gray
+                            text: `Overall Accuracy: ${overallStats.accuracy || 0}%`,
+                            font: {
+                                size: 16,
+                                weight: 'bold'
                             }
-                        }),
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        r: {
-                            beginAtZero: true,
-                            max: 100,
-                            ticks: {
-                                stepSize: 20
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
                         },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    const stat = sortedStats[context.dataIndex];
-                                    return [
-                                        `Status: ${stat.status}`,
-                                        `Accuracy: ${stat.accuracy || 0}%`,
-                                        `Progress: ${stat.attempted}/${stat.total_questions} questions`
-                                    ];
+                                    const value = context.raw;
+                                    const percentage = Math.round((value / Math.max(1, totalQuestions)) * 100);
+                                    return `${context.label}: ${value} (${percentage}%)`;
                                 }
                             }
                         }
@@ -533,21 +518,83 @@
                 }
             });
             
-            // Update summary statistics
-            const summaryStats = document.getElementById('summaryStats');
-            if (summaryStats) {
-                summaryStats.innerHTML = `
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div class="bg-white p-4 rounded-lg shadow">
-                            <h3 class="text-lg font-semibold text-gray-700">Total Questions</h3>
-                            <p class="text-2xl font-bold text-indigo-600">${overallStats.total_questions || 0}</p>
-                        </div>
-                        <div class="bg-white p-4 rounded-lg shadow">
-                            <h3 class="text-lg font-semibold text-gray-700">Average Time</h3>
-                            <p class="text-2xl font-bold text-indigo-600">${Math.round(overallStats.avg_time || 0)}s</p>
-                        </div>
-                    </div>
-                `;
+            // Concept mastery chart
+            if (conceptStats.length > 0) {
+                conceptChart = new Chart(conceptCtx, {
+                    type: 'radar',
+                    data: {
+                        labels: conceptStats.map(stat => stat.name),
+                        datasets: [{
+                            label: 'Concept Mastery',
+                            data: conceptStats.map(stat => stat.accuracy || 0),
+                            backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                            borderColor: 'rgb(79, 70, 229)',
+                            pointBackgroundColor: conceptStats.map(stat => {
+                                switch(stat.status) {
+                                    case 'Mastered': return 'rgb(34, 197, 94)';  // green
+                                    case 'In progress': return 'rgb(234, 179, 8)';  // yellow
+                                    case 'Needs practice': return 'rgb(239, 68, 68)';  // red
+                                    default: return 'rgb(156, 163, 175)';  // gray
+                                }
+                            }),
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            r: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: {
+                                    stepSize: 20
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const stat = conceptStats[context.dataIndex];
+                                        return [
+                                            `Status: ${stat.status}`,
+                                            `Accuracy: ${stat.accuracy || 0}%`,
+                                            `Progress: ${stat.attempted}/${stat.total_questions} questions`
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                // If no concept stats, show placeholder
+                conceptChart = new Chart(conceptCtx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Start practicing to see concept mastery!'],
+                        datasets: [{
+                            label: 'Concept Mastery',
+                            data: [0],
+                            backgroundColor: 'rgba(156, 163, 175, 0.2)',
+                            borderColor: 'rgb(156, 163, 175)',
+                            pointBackgroundColor: 'rgb(156, 163, 175)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            r: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
             }
         }
 
@@ -568,6 +615,7 @@
                 clearInterval(timer);
                 timer = null;
             }
+            return seconds;
         }
     </script>
 </body>
