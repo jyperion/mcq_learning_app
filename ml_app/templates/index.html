@@ -31,27 +31,46 @@
         </nav>
 
         <!-- Main Content -->
-        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <main class="py-10">
             <!-- Welcome Section -->
-            <div id="welcome" class="bg-white shadow rounded-lg p-6 mb-6">
-                <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome to ML Interview Prep!</h2>
-                <p class="text-gray-600 mb-6">Practice machine learning interview questions, track your progress, and improve your skills.</p>
-                <div class="mb-6">
-                    <label for="userName" class="block text-sm font-medium text-gray-700 mb-2">Your Name</label>
-                    <input type="text" id="userName" name="userName" 
-                           class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500 focus:border-indigo-500" 
-                           placeholder="Enter your name">
+            <div id="startSection" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center">
+                    <h1 class="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
+                        <span class="block">ML Interview Practice</span>
+                        <span class="block text-indigo-600">Test Your Knowledge</span>
+                    </h1>
+                    <p class="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
+                        Practice machine learning interview questions, track your progress, and improve your skills.
+                    </p>
+                    <div class="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
+                        <div class="mt-3 sm:mt-0">
+                            <input type="text" id="userName" placeholder="Enter your name" class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div class="mt-3 sm:mt-0 sm:ml-3">
+                            <button id="startSession" class="w-full flex items-center justify-center px-8 py-2 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:text-lg">
+                                Start Practice
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <button id="startSession" class="bg-indigo-600 text-white px-6 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-700 transform hover:scale-105 transition-all">
-                    Start Practice Session
-                </button>
             </div>
 
-            <!-- Concept Selection (Initially Hidden) -->
-            <div id="conceptSelection" class="hidden bg-white shadow rounded-lg p-6 mb-6">
-                <h3 class="text-xl font-bold text-gray-900 mb-4">Select a Topic</h3>
-                <div id="conceptList" class="grid grid-cols-1 gap-4">
-                    <!-- Concepts will be dynamically added here -->
+            <!-- Concepts Section -->
+            <div id="conceptsSection" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Choose a Concept to Practice</h2>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div class="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-indigo-500 hover:ring-1 hover:ring-indigo-500 cursor-pointer">
+                        <h3 class="text-lg font-medium text-gray-900">Machine Learning Basics</h3>
+                        <p class="mt-1 text-sm text-gray-500">Fundamental concepts and algorithms</p>
+                    </div>
+                    <div class="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-indigo-500 hover:ring-1 hover:ring-indigo-500 cursor-pointer">
+                        <h3 class="text-lg font-medium text-gray-900">Deep Learning</h3>
+                        <p class="mt-1 text-sm text-gray-500">Neural networks and architectures</p>
+                    </div>
+                    <div class="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-indigo-500 hover:ring-1 hover:ring-indigo-500 cursor-pointer">
+                        <h3 class="text-lg font-medium text-gray-900">Natural Language Processing</h3>
+                        <p class="mt-1 text-sm text-gray-500">Text processing and language models</p>
+                    </div>
                 </div>
             </div>
 
@@ -290,8 +309,8 @@
                 const data = await response.json();
                 if (response.ok) {
                     sessionId = data.session_id;
-                    document.getElementById('welcome').classList.add('hidden');
-                    document.getElementById('conceptSelection').classList.remove('hidden');
+                    document.getElementById('startSection').classList.add('hidden');
+                    document.getElementById('conceptsSection').classList.remove('hidden');
                     document.getElementById('scoreDisplay').classList.remove('hidden');
                     document.getElementById('timerDisplay').classList.remove('hidden');
                     loadConcepts();
@@ -311,7 +330,7 @@
                 });
                 const concepts = await response.json();
                 
-                const conceptList = document.getElementById('conceptList');
+                const conceptList = document.getElementById('conceptsSection');
                 conceptList.innerHTML = '';
                 
                 if (!Array.isArray(concepts)) {
@@ -360,7 +379,7 @@
                 const concept = await response.json();
                 
                 currentConceptId = conceptId;
-                document.getElementById('conceptSelection').classList.add('hidden');
+                document.getElementById('conceptsSection').classList.add('hidden');
                 document.getElementById('questionSection').classList.remove('hidden');
                 document.getElementById('progressSection').classList.remove('hidden');
                 await getNextQuestion();
@@ -596,26 +615,6 @@
             }
         }
 
-        function startTimer() {
-            seconds = 0;
-            if (timer) clearInterval(timer);
-            timer = setInterval(() => {
-                seconds++;
-                const minutes = Math.floor(seconds / 60);
-                const remainingSeconds = seconds % 60;
-                document.getElementById('timer').textContent = 
-                    `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-            }, 1000);
-        }
-
-        function stopTimer() {
-            if (timer) {
-                clearInterval(timer);
-                timer = null;
-            }
-            return seconds;
-        }
-
         async function endQuiz() {
             try {
                 const response = await fetch(`${API_BASE}/session/end`, {
@@ -630,7 +629,7 @@
                 const data = await response.json();
                 
                 // Show final score
-                alert(`Quiz ended! Your final score is ${data.score}`);
+                alert(`Quiz ended! Your final score is ${data.score}%`);
                 
                 // Reset session
                 sessionId = null;
@@ -640,8 +639,13 @@
                 score = 0;
                 questionNumber = 1;
                 
-                // Hide progress section
+                // Hide question and progress sections
+                document.getElementById('questionSection').classList.add('hidden');
                 document.getElementById('progressSection').classList.add('hidden');
+                
+                // Show concepts section
+                document.getElementById('conceptsSection').classList.remove('hidden');
+                document.getElementById('startSection').classList.remove('hidden');
                 
                 // Reset charts
                 progressChart.data.labels = ['No Data'];
@@ -660,6 +664,26 @@
                 console.error('Failed to end session:', error);
                 alert('Failed to end session: ' + error.message);
             }
+        }
+
+        function startTimer() {
+            seconds = 0;
+            if (timer) clearInterval(timer);
+            timer = setInterval(() => {
+                seconds++;
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                document.getElementById('timer').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+            return seconds;
         }
     </script>
 </body>

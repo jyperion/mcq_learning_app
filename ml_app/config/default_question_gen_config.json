@@ -1,0 +1,59 @@
+{
+    "valid_concepts": {
+        "Neural Networks and Deep Learning": [
+            "neural network", "deep learning", "cnn", "rnn", "lstm", "activation function", 
+            "backpropagation", "transformer", "attention mechanism", "bert", "gpt"
+        ],
+        "Machine Learning Fundamentals": [
+            "regression", "classification", "clustering", "dimensionality reduction", 
+            "feature selection", "cross validation", "bias variance", "overfitting", 
+            "underfitting", "ensemble methods", "decision trees", "random forest", "svm"
+        ],
+        "Large Language Models": [
+            "llm", "language model", "transformer", "attention mechanism", "prompt engineering", 
+            "fine-tuning", "few-shot learning", "zero-shot learning", "tokenization", 
+            "embedding", "bert", "gpt", "prompt tuning"
+        ],
+        "Model Optimization": [
+            "gradient descent", "optimization", "regularization", "hyperparameter", 
+            "learning rate", "batch size", "momentum", "adam", "rmsprop", "dropout", 
+            "batch normalization", "early stopping"
+        ],
+        "Model Evaluation": [
+            "metrics", "evaluation", "validation", "testing", "performance measure", 
+            "confusion matrix", "precision", "recall", "f1 score", "roc curve", "auc", 
+            "cross validation", "holdout"
+        ],
+        "MLOps": [
+            "model deployment", "model monitoring", "model versioning", "ci/cd", 
+            "feature store", "model registry", "model serving", "a/b testing", 
+            "model drift", "data drift", "mlflow", "kubeflow"
+        ]
+    },
+    "ollama_config": {
+        "url": "http://localhost:11434/api/generate",
+        "default_model": "qwen2.5:latest",
+        "generation_params": {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "num_ctx": 4096,
+            "num_predict": 512,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0,
+            "tfs_z": 1.0,
+            "mirostat": 2,
+            "mirostat_tau": 5.0,
+            "mirostat_eta": 0.1,
+            "seed": 42
+        }
+    },
+    "question_gen_config": {
+        "max_concurrent_queries": 3,
+        "max_retries": 3,
+        "batch_size": 10,
+        "similarity_threshold": 0.85,
+        "question_format": "You are an expert in machine learning, particularly in {concept}.\nGenerate exactly {num_questions} complete multiple choice questions.{existing_context}\n\nFor each question, provide:\n1. A challenging question about {concept}\n2. Four multiple choice options (A, B, C, D)\n3. The correct answer\n4. A detailed explanation\n\nGuidelines:\n- Questions should test understanding and problem-solving\n- Make all options plausible but only one correct\n- Include detailed explanations\n- Cover different aspects of {concept}\n- Generate UNIQUE questions, different from the existing ones\n- Each question should focus on a different aspect or subtopic\n- IMPORTANT: Generate EXACTLY {num_questions} questions, no more, no less\n\nFormat each question exactly like this:\n\nQ1. What is the most effective approach to handle vanishing gradients in deep neural networks?\nA) Use ReLU activation functions\nB) Increase the learning rate\nC) Remove all activation functions\nD) Add more layers\nCorrect: A\nExplanation: ReLU activation functions help prevent vanishing gradients because they do not saturate for positive values...\n\nQ2. [Next question follows the same format]\n\nRemember: Generate EXACTLY {num_questions} complete questions."
+    }
+}

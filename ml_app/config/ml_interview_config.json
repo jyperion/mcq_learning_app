@@ -1,0 +1,118 @@
+{
+    "valid_concepts": {
+        "Machine Learning Fundamentals": [
+            "regression", "classification", "clustering", "dimensionality reduction",
+            "feature selection", "cross validation", "bias variance tradeoff",
+            "overfitting", "underfitting", "ensemble methods", "decision trees",
+            "random forest", "svm", "bagging", "boosting", "voting classifiers"
+        ],
+        "Feature Engineering": [
+            "data normalization", "min-max scaling", "standard scaling", "robust scaling",
+            "missing data imputation", "mean imputation", "median imputation", "knn imputation",
+            "one-hot encoding", "label encoding", "target encoding", "feature hashing",
+            "polynomial features", "interaction terms", "feature crossing",
+            "log transformation", "box-cox transformation", "yeo-johnson transformation",
+            "feature selection", "dimensionality reduction", "feature importance",
+            "preprocessing", "data augmentation"
+        ],
+        "Supervised Learning": [
+            "linear regression", "logistic regression", "ordinary least squares",
+            "polynomial regression", "ridge regression", "lasso regression", "elastic net",
+            "binary classification", "multiclass classification",
+            "svm fundamentals", "kernel tricks", "support vectors", "margin optimization",
+            "decision trees", "random forests", "gradient boosting",
+            "cross-entropy loss", "regression metrics", "classification metrics"
+        ],
+        "Unsupervised Learning": [
+            "kmeans clustering", "elbow method", "silhouette score",
+            "hierarchical clustering", "linkage methods", "dendrogram interpretation",
+            "dbscan", "density-based clustering", "noise handling",
+            "gaussian mixture models", "em algorithm", "cluster validation",
+            "pca", "eigenvalues", "explained variance",
+            "tsne", "manifold learning", "dimensionality reduction",
+            "autoencoders", "latent space", "reconstruction loss"
+        ],
+        "Neural Networks and Deep Learning": [
+            "perceptrons", "activation functions", "neural architecture",
+            "backpropagation", "chain rule", "gradient computation",
+            "cnn", "rnn", "lstm", "gru", "transformer",
+            "attention mechanism", "self-attention", "positional encoding",
+            "bert", "gpt", "transfer learning", "fine-tuning",
+            "batch normalization", "dropout", "regularization",
+            "vanishing gradients", "exploding gradients", "initialization"
+        ],
+        "Deep Learning Applications": [
+            "computer vision", "image classification", "object detection",
+            "semantic segmentation", "region proposal", "iou metrics",
+            "gan architecture", "generator", "discriminator",
+            "sequence models", "natural language processing",
+            "speech recognition", "time series forecasting",
+            "recommendation systems", "anomaly detection"
+        ],
+        "Large Language Models": [
+            "llm architecture", "transformer models", "attention mechanisms",
+            "prompt engineering", "few-shot learning", "zero-shot learning",
+            "tokenization", "embeddings", "bert variants", "gpt variants",
+            "prompt tuning", "instruction tuning", "chain of thought",
+            "model alignment", "model distillation", "efficient inference"
+        ],
+        "Reinforcement Learning": [
+            "mdp fundamentals", "state space", "action space",
+            "value iteration", "policy iteration", "bellman equation",
+            "q learning", "dqn", "experience replay",
+            "policy gradients", "reinforce", "advantage estimation",
+            "ppo", "actor critic", "exploration exploitation",
+            "multi-agent rl", "reward shaping", "curriculum learning"
+        ],
+        "Model Optimization": [
+            "gradient descent variants", "learning rate scheduling",
+            "momentum", "adam", "rmsprop", "adagrad",
+            "batch size selection", "early stopping",
+            "hyperparameter tuning", "grid search", "random search",
+            "bayesian optimization", "gaussian processes",
+            "cross validation strategies", "nested cross validation"
+        ],
+        "Model Evaluation": [
+            "validation strategies", "k-fold cross validation",
+            "stratified sampling", "holdout method",
+            "classification metrics", "confusion matrix", "precision",
+            "recall", "f1 score", "roc curve", "auc",
+            "regression metrics", "rmse", "mae", "r squared",
+            "learning curves", "validation curves"
+        ],
+        "MLOps and Production": [
+            "model deployment", "model monitoring", "model versioning",
+            "ci/cd pipelines", "feature stores", "model registry",
+            "model serving", "a/b testing", "model drift detection",
+            "data drift detection", "mlflow", "kubeflow",
+            "distributed training", "mixed precision training",
+            "model parallelism", "containerization", "orchestration"
+        ]
+    },
+    "ollama_config": {
+        "url": "http://localhost:11434/api/generate",
+        "default_model": "qwen2.5:latest",
+        "generation_params": {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "num_ctx": 4096,
+            "num_predict": 512,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0,
+            "tfs_z": 1.0,
+            "mirostat": 2,
+            "mirostat_tau": 5.0,
+            "mirostat_eta": 0.1,
+            "seed": 42
+        }
+    },
+    "question_gen_config": {
+        "max_concurrent_queries": 3,
+        "max_retries": 3,
+        "batch_size": 10,
+        "similarity_threshold": 0.85,
+        "question_format": "You are an expert in machine learning and deep learning, particularly in {concept}.\nGenerate exactly {num_questions} complete multiple choice questions.{existing_context}\n\nFor each question, provide:\n1. A challenging technical question about {concept}\n2. Four multiple choice options (A, B, C, D)\n3. The correct answer\n4. A detailed explanation with mathematical formulas or code snippets where relevant\n\nGuidelines:\n- Questions should test deep understanding of ML concepts\n- Make all options plausible but only one correct\n- Include mathematical notation or code examples in explanations where appropriate\n- Cover different aspects of {concept}\n- Generate UNIQUE questions, different from the existing ones\n- Each question should focus on a different aspect or subtopic\n- IMPORTANT: Generate EXACTLY {num_questions} questions, no more, no less\n\nFormat each question exactly like this:\n\nQ1. In gradient descent optimization, what is the primary purpose of momentum?\nA) To increase the learning rate adaptively\nB) To help overcome local minima and speed up convergence\nC) To reduce the learning rate over time\nD) To add regularization to the model\nCorrect: B\nExplanation: Momentum in gradient descent helps overcome local minima and speeds up convergence by adding a fraction of the previous update to the current update. The update rule with momentum is:\nv(t) = βv(t-1) + (1-β)∇J(θ)\nθ(t) = θ(t-1) - αv(t)\nwhere β is the momentum coefficient (typically 0.9), α is the learning rate, and ∇J(θ) is the gradient. This helps the optimizer maintain velocity in consistent directions and dampen oscillations in high-curvature directions...\n\nQ2. [Next question follows the same format]\n\nRemember: Generate EXACTLY {num_questions} complete questions."
+    }
+}

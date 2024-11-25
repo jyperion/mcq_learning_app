@@ -1,0 +1,129 @@
+{
+    "valid_concepts": {
+        "Employment Law": [
+            "employment rights", "contracts", "working time regulations", "minimum wage",
+            "employment status", "worker rights", "statutory rights", "employment tribunals",
+            "unfair dismissal", "constructive dismissal", "redundancy"
+        ],
+        "Recruitment and Selection": [
+            "job descriptions", "person specifications", "recruitment methods", "selection process",
+            "interviews", "assessment centers", "background checks", "right to work",
+            "discrimination", "equal opportunities", "talent acquisition"
+        ],
+        "Employee Relations": [
+            "grievance procedures", "disciplinary procedures", "trade unions", "collective bargaining",
+            "workplace conflict", "mediation", "employee engagement", "staff consultation",
+            "workplace policies", "staff handbooks"
+        ],
+        "Health and Safety": [
+            "health and safety at work act", "risk assessment", "workplace safety",
+            "occupational health", "DSE regulations", "first aid requirements",
+            "accident reporting", "RIDDOR", "PPE regulations"
+        ],
+        "Compensation and Benefits": [
+            "salary structures", "pay scales", "benefits packages", "pension schemes",
+            "statutory payments", "bonus schemes", "commission", "salary sacrifice",
+            "company cars", "healthcare"
+        ],
+        "Leave and Absence": [
+            "annual leave", "sick leave", "maternity leave", "paternity leave",
+            "shared parental leave", "compassionate leave", "time off for dependants",
+            "unpaid leave", "sabbaticals"
+        ],
+        "Performance Management": [
+            "performance reviews", "appraisals", "objective setting", "KPIs",
+            "performance improvement plans", "capability procedures", "talent management",
+            "succession planning"
+        ],
+        "Training and Development": [
+            "learning needs analysis", "training programs", "professional development",
+            "apprenticeships", "coaching", "mentoring", "skills assessment",
+            "career development"
+        ],
+        "Diversity and Inclusion": [
+            "equality act 2010", "protected characteristics", "reasonable adjustments",
+            "diversity initiatives", "inclusive workplace", "unconscious bias",
+            "positive action", "workplace culture"
+        ],
+        "Data Protection": [
+            "GDPR", "data protection act", "employee privacy", "data retention",
+            "subject access requests", "data security", "confidentiality",
+            "information governance"
+        ],
+        "Change Management": [
+            "organizational change", "restructuring", "mergers", "acquisitions",
+            "TUPE regulations", "change communication", "stakeholder management",
+            "resistance management"
+        ],
+        "HR Strategy": [
+            "workforce planning", "HR policies", "organizational development",
+            "HR metrics", "strategic planning", "business alignment",
+            "HR transformation", "culture change"
+        ],
+        "Employee Wellbeing": [
+            "mental health", "stress management", "work-life balance",
+            "employee assistance programs", "wellbeing initiatives", "psychological safety",
+            "burnout prevention"
+        ],
+        "IR35 and Contractors": [
+            "contractor management", "IR35 regulations", "off-payroll working",
+            "status determination", "self-employed rights", "agency workers",
+            "temporary workers"
+        ],
+        "Brexit and Immigration": [
+            "points-based system", "skilled worker visa", "right to work checks",
+            "sponsor licenses", "immigration compliance", "EU settlement scheme",
+            "cross-border employment"
+        ],
+        "Workplace Technology": [
+            "HR systems", "HRIS", "ATS", "payroll systems", "time and attendance",
+            "digital transformation", "remote working technology", "collaboration tools"
+        ],
+        "Industrial Relations": [
+            "union recognition", "collective agreements", "industrial action",
+            "workplace representatives", "consultation committees", "works councils",
+            "employee voice"
+        ],
+        "Reward Management": [
+            "total reward", "recognition programs", "long-term incentives",
+            "market benchmarking", "job evaluation", "grade structures",
+            "pay transparency"
+        ],
+        "HR Compliance": [
+            "statutory reporting", "modern slavery", "gender pay gap",
+            "employment law updates", "regulatory compliance", "audit requirements",
+            "record keeping"
+        ],
+        "Remote Working": [
+            "hybrid working", "flexible working", "home working policies",
+            "remote team management", "virtual onboarding", "digital workplace",
+            "remote performance management"
+        ]
+    },
+    "ollama_config": {
+        "url": "http://localhost:11434/api/generate",
+        "default_model": "qwen2.5:latest",
+        "generation_params": {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "num_ctx": 4096,
+            "num_predict": 512,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0,
+            "tfs_z": 1.0,
+            "mirostat": 2,
+            "mirostat_tau": 5.0,
+            "mirostat_eta": 0.1,
+            "seed": 42
+        }
+    },
+    "question_gen_config": {
+        "max_concurrent_queries": 3,
+        "max_retries": 3,
+        "batch_size": 10,
+        "similarity_threshold": 0.85,
+        "question_format": "You are an expert in UK HR practices and employment law, particularly in {concept}.\nGenerate exactly {num_questions} complete multiple choice questions.{existing_context}\n\nFor each question, provide:\n1. A challenging question about {concept} specific to UK workplace practices\n2. Four multiple choice options (A, B, C, D)\n3. The correct answer\n4. A detailed explanation referencing UK legislation or best practices where relevant\n\nGuidelines:\n- Questions should test understanding of UK-specific HR practices and regulations\n- Make all options plausible but only one correct\n- Include detailed explanations with references to UK law where applicable\n- Cover different aspects of {concept}\n- Generate UNIQUE questions, different from the existing ones\n- Each question should focus on a different aspect or subtopic\n- IMPORTANT: Generate EXACTLY {num_questions} questions, no more, no less\n\nFormat each question exactly like this:\n\nQ1. Under the Working Time Regulations 1998, what is the minimum amount of paid annual leave that a full-time employee is entitled to in the UK?\nA) 20 days\nB) 28 days including bank holidays\nC) 25 days excluding bank holidays\nD) 30 days including bank holidays\nCorrect: B\nExplanation: Under the Working Time Regulations 1998, workers in the UK are entitled to 5.6 weeks (28 days) of paid annual leave per year. This can include bank holidays, of which there are usually 8 in England and Wales. This is a statutory minimum, and employers can offer more but not less...\n\nQ2. [Next question follows the same format]\n\nRemember: Generate EXACTLY {num_questions} complete questions."
+    }
+}
