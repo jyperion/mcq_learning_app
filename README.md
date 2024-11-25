@@ -12,6 +12,9 @@ ml-app/
 │   │   ├── __init__.py
 │   │   ├── questions.py        # Question-related endpoints
 │   │   └── feedback.py         # Feedback-related endpoints
+│   ├── config/                 # Configuration files
+│   │   ├── ml_interview_config.json    # ML interview configuration
+│   │   └── uk_hr_config.json          # HR interview configuration
 │   ├── database/               # Database management
 │   │   ├── __init__.py
 │   │   ├── db.py              # Database operations
@@ -51,12 +54,40 @@ ml-app/
 
 ## Features
 
-- AI-powered question generation using Ollama
-- Multiple choice question format
-- Question quality management (flag, update, delete)
-- Concept-based categorization
+- AI-powered question generation using Ollama (Qwen2.5 model)
+- Multiple choice questions with detailed explanations
+- Configurable question generation parameters
+- Support for multiple domains (ML and HR interviews)
+- Question quality validation and duplicate detection
+- Concept-based categorization with 16 ML topics
 - Progress tracking
 - Async processing for better performance
+- Comprehensive error handling and logging
+
+## Configuration
+
+The application uses JSON configuration files for different question domains:
+
+1. ML Interview Configuration (`ml_app/config/ml_interview_config.json`):
+   - 16 machine learning concept categories
+   - Ollama model parameters
+   - Question generation settings
+   - Validation rules
+
+2. HR Interview Configuration (`ml_app/config/uk_hr_config.json`):
+   - HR-specific question categories
+   - Custom generation parameters
+   - Domain-specific validation
+
+## Question Generation
+
+Questions are generated with the following specifications:
+- Format: Multiple Choice Questions (MCQ)
+- Options: 4 choices (A, B, C, D)
+- Components: Question, Options, Correct Answer, Detailed Explanation
+- Batch Size: 5 questions per generation
+- Context Window: 8192 tokens
+- Generation Length: 4096 tokens
 
 ## Setup
 
@@ -81,10 +112,28 @@ ml-app/
    ollama serve
    ```
 
-5. Run the application:
+5. Pull the Qwen2.5 model:
+   ```bash
+   ollama pull qwen2.5
+   ```
+
+6. Run the application:
    ```bash
    flask run
    ```
+
+## Question Generation Script
+
+To generate questions:
+```bash
+python ml_app/question_generation/generate_questions.py --config ml_app/config/ml_interview_config.json --output data/ml_questions.json
+```
+
+Options:
+- `--config`: Path to configuration file
+- `--output`: Output JSON file
+- `--test`: Run in test mode (generates fewer questions)
+- `--concept`: Generate for specific concept only
 
 ## Development
 
