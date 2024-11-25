@@ -154,10 +154,34 @@ Options:
 
 ## API Endpoints
 
-- `GET /api/questions`: Get questions
-- `POST /api/questions/recheck/<id>`: Recheck a question
-- `POST /api/questions/<id>/feedback`: Submit feedback
-- `DELETE /api/questions/<id>`: Delete a question
+### Questions
+- `GET /api/questions/<id>`: Get a specific question
+- `GET /api/questions/random`: Get random questions (optional params: concept_id, count)
+- `POST /api/questions/submit`: Submit an answer to a question
+
+### Concepts
+- `GET /api/concepts`: Get list of all ML concepts
+- `GET /api/concepts/<id>`: Get detailed information about a specific concept
+- `GET /api/concepts/<id>/questions`: Get questions for a specific concept
+- `GET /api/concepts/search`: Search concepts by name or description
+
+### Practice
+- `GET /api/practice/question`: Get next practice question
+- `POST /api/practice/answer`: Submit answer for practice question
+- `GET /api/practice/progress`: Get practice session progress
+
+### Sessions
+- `POST /api/session/start`: Start a new practice session
+- `POST /api/session/<id>/end`: End a practice session
+- `POST /api/session/<id>/progress`: Update session progress
+
+### Statistics
+- `GET /api/stats/overview`: Get overview statistics
+- `GET /api/stats/progress`: Get progress statistics over time
+- `GET /api/stats/concepts`: Get performance by concept
+- `GET /api/stats/activity`: Get recent activity
+
+All endpoints that handle user data require an `X-Session-ID` header for user identification.
 
 ## Contributing
 
