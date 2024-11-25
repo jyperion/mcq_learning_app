@@ -96,8 +96,8 @@
             "temperature": 0.7,
             "top_p": 0.9,
             "top_k": 40,
-            "num_ctx": 4096,
-            "num_predict": 512,
+            "num_ctx": 8192,
+            "num_predict": 4096,
             "repeat_penalty": 1.1,
             "presence_penalty": 0.0,
             "frequency_penalty": 0.0,
@@ -111,8 +111,8 @@
     "question_gen_config": {
         "max_concurrent_queries": 3,
         "max_retries": 3,
-        "batch_size": 10,
+        "batch_size": 5,
         "similarity_threshold": 0.85,
-        "question_format": "You are an expert in machine learning and deep learning, particularly in {concept}.\nGenerate exactly {num_questions} complete multiple choice questions.{existing_context}\n\nFor each question, provide:\n1. A challenging technical question about {concept}\n2. Four multiple choice options (A, B, C, D)\n3. The correct answer\n4. A detailed explanation with mathematical formulas or code snippets where relevant\n\nGuidelines:\n- Questions should test deep understanding of ML concepts\n- Make all options plausible but only one correct\n- Include mathematical notation or code examples in explanations where appropriate\n- Cover different aspects of {concept}\n- Generate UNIQUE questions, different from the existing ones\n- Each question should focus on a different aspect or subtopic\n- IMPORTANT: Generate EXACTLY {num_questions} questions, no more, no less\n\nFormat each question exactly like this:\n\nQ1. In gradient descent optimization, what is the primary purpose of momentum?\nA) To increase the learning rate adaptively\nB) To help overcome local minima and speed up convergence\nC) To reduce the learning rate over time\nD) To add regularization to the model\nCorrect: B\nExplanation: Momentum in gradient descent helps overcome local minima and speeds up convergence by adding a fraction of the previous update to the current update. The update rule with momentum is:\nv(t) = βv(t-1) + (1-β)∇J(θ)\nθ(t) = θ(t-1) - αv(t)\nwhere β is the momentum coefficient (typically 0.9), α is the learning rate, and ∇J(θ) is the gradient. This helps the optimizer maintain velocity in consistent directions and dampen oscillations in high-curvature directions...\n\nQ2. [Next question follows the same format]\n\nRemember: Generate EXACTLY {num_questions} complete questions."
+        "question_format": "You are an expert in machine learning and deep learning, particularly in {concept}.\nGenerate exactly {num_questions} multiple choice questions.{existing_context}\n\nEach question MUST follow this EXACT format:\n\nQ1. [Your question text here]\nA) [Option A]\nB) [Option B]\nC) [Option C]\nD) [Option D]\nCorrect: [A, B, C, or D]\nExplanation: [Your detailed explanation]\n\nRequirements for each question:\n1. Question must be clear and technical\n2. All four options (A, B, C, D) must be provided\n3. Only ONE option should be correct\n4. Correct answer must be specified as A, B, C, or D\n5. Explanation must be detailed and technical\n6. Each question should focus on a different aspect of {concept}\n7. Make sure all questions are unique\n\nExample format:\nQ1. In the context of neural networks, what is the primary purpose of the ReLU (Rectified Linear Unit) activation function?\nA) To normalize input values between 0 and 1\nB) To introduce non-linearity and handle vanishing gradients\nC) To reduce model complexity\nD) To regularize the network weights\nCorrect: B\nExplanation: ReLU (f(x) = max(0,x)) is widely used because it effectively handles the vanishing gradient problem present in earlier activation functions like sigmoid. It introduces non-linearity while being computationally efficient, as it simply outputs the input for positive values and zero for negative values. This helps maintain strong gradients during backpropagation, enabling faster training of deep networks. Unlike sigmoid/tanh, ReLU doesn't saturate for positive values, allowing for better gradient flow.\n\nQ2. [Next question follows the same format]\n\nRemember: Generate EXACTLY {num_questions} complete questions following this format precisely."
     }
 }
