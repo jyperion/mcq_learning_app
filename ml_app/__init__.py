@@ -38,7 +38,7 @@ def create_app(test_config=None):
         # Load the instance config, if it exists, when not testing
         app.config.from_mapping(
             SECRET_KEY='dev',
-            DATABASE=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ml_app.sqlite'),
+            DATABASE=os.path.join(app.instance_path, 'ml_app.sqlite'),
         )
     else:
         # Load the test config if passed in

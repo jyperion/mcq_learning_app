@@ -280,9 +280,9 @@
         document.getElementById('options').addEventListener('click', function(e) {
             const button = e.target.closest('button');
             if (button && !button.disabled) {
-                const answer = button.getAttribute('data-answer');
-                if (answer) {
-                    submitAnswer(answer);
+                const index = parseInt(button.getAttribute('data-index'));
+                if (index !== NaN) {
+                    submitAnswer(index);
                 }
             }
         });
@@ -424,12 +424,13 @@
             question.options.forEach((option, index) => {
                 const button = document.createElement('button');
                 button.className = 'w-full text-left p-4 rounded-lg border border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 transition-colors';
-                button.setAttribute('data-answer', option);
+                button.setAttribute('data-index', index);
                 button.innerHTML = `
                     <div class="flex items-center">
-                        <span class="text-lg font-medium">${option}</span>
+                        <span class="text-lg font-medium">${String.fromCharCode(65 + index)}. ${option}</span>
                     </div>
                 `;
+                button.onclick = () => submitAnswer(index);
                 optionsContainer.appendChild(button);
             });
             
@@ -447,22 +448,21 @@
             startTimer();
         }
 
-        async function submitAnswer(selectedAnswer) {
+        async function submitAnswer(selectedIndex) {
             if (!currentQuestion) return;
             
-            stopTimer();
+            const timeTaken = stopTimer();
             
             try {
-                const response = await fetch(`${API_BASE}/practice/answer`, {
+                const response = await fetch(`/api/questions/${currentQuestion.id}/submit`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-Session-ID': sessionId
                     },
                     body: JSON.stringify({
-                        questionId: currentQuestion.id,
-                        answer: selectedAnswer,
-                        timeTaken: seconds
+                        answer: selectedIndex,
+                        time_taken: timeTaken
                     })
                 });
                 
@@ -473,13 +473,13 @@
                 // Highlight correct and incorrect answers
                 const options = document.querySelectorAll('#options button');
                 options.forEach(button => {
-                    const answer = button.getAttribute('data-answer');
+                    const index = parseInt(button.getAttribute('data-index'));
                     button.disabled = true;
                     
-                    if (answer === result.correctAnswer) {
+                    if (index === result.correct_answer) {
                         button.classList.remove('hover:border-indigo-500', 'hover:bg-indigo-50');
                         button.classList.add('border-green-500', 'bg-green-50', 'text-green-800');
-                    } else if (answer === selectedAnswer && !result.correct) {
+                    } else if (index === selectedIndex && !result.correct) {
                         button.classList.remove('hover:border-indigo-500', 'hover:bg-indigo-50');
                         button.classList.add('border-red-500', 'bg-red-50', 'text-red-800');
                     }
@@ -504,6 +504,7 @@
                 
             } catch (error) {
                 console.error('Error submitting answer:', error);
+                alert('Failed to submit answer: ' + error.message);
             }
         }
 

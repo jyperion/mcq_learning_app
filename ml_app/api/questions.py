@@ -10,26 +10,27 @@ def get_question(question_id):
     try:
         db_conn = db.get_db()
         question = db_conn.execute(
-            'SELECT q.*, GROUP_CONCAT(c.name) as concepts '
+            'SELECT q.*, c.name as concept_name '
             'FROM questions q '
-            'LEFT JOIN question_concepts qc ON q.id = qc.question_id '
-            'LEFT JOIN concepts c ON qc.concept_id = c.id '
-            'WHERE q.id = ? '
-            'GROUP BY q.id',
+            'LEFT JOIN concepts c ON q.concept_id = c.id '
+            'WHERE q.id = ?',
             (question_id,)
         ).fetchone()
         
         if not question:
             return jsonify({"error": "Question not found"}), 404
             
+        # Parse options from JSON string
+        options = json.loads(question['options'])
+        
         return jsonify({
             'id': question['id'],
             'text': question['text'],
-            'options': question['options'].split('|'),
+            'options': options,
             'explanation': question['explanation'],
             'difficulty': question['difficulty'],
-            'hint': question['hint'],
-            'concepts': question['concepts'].split(',') if question['concepts'] else []
+            'hint': question.get('hint', ''),  # Use dict access with default
+            'concepts': [question['concept_name']] if question['concept_name'] else []
         })
     except Exception as e:
         current_app.logger.error(f"Error getting question: {str(e)}")
@@ -51,8 +52,7 @@ def get_random_questions():
         total_query = '''
             SELECT COUNT(DISTINCT q.id) as total
             FROM questions q
-            JOIN question_concepts qc ON q.id = qc.question_id
-            WHERE qc.concept_id = ?
+            WHERE q.concept_id = ?
         '''
         total_result = db_conn.execute(total_query, (concept_id,)).fetchone()
         total_questions = total_result['total'] if total_result else 0
@@ -64,8 +64,8 @@ def get_random_questions():
             answered_query = '''
                 SELECT COUNT(DISTINCT ua.question_id) as answered
                 FROM user_answers ua
-                JOIN question_concepts qc ON ua.question_id = qc.question_id
-                WHERE ua.session_id = ? AND qc.concept_id = ?
+                JOIN questions q ON ua.question_id = q.id
+                WHERE ua.session_id = ? AND q.concept_id = ?
             '''
             answered_result = db_conn.execute(answered_query, (session_id, concept_id)).fetchone()
             answered_count = answered_result['answered'] if answered_result else 0
@@ -79,8 +79,7 @@ def get_random_questions():
                     WHERE session_id = ? AND question_id IN (
                         SELECT q.id 
                         FROM questions q
-                        JOIN question_concepts qc ON q.id = qc.question_id
-                        WHERE qc.concept_id = ?
+                        WHERE q.concept_id = ?
                     )
                 ''', (session_id, concept_id))
                 db_conn.commit()
@@ -91,17 +90,15 @@ def get_random_questions():
         query = '''
             WITH available_questions AS (
                 SELECT DISTINCT q.id, q.text, q.options, q.explanation, 
-                       q.difficulty, q.hint, GROUP_CONCAT(c.name) as concepts
+                       q.difficulty, q.hint, c.name as concept_name
                 FROM questions q
-                JOIN question_concepts qc ON q.id = qc.question_id
-                LEFT JOIN concepts c ON qc.concept_id = c.id
-                WHERE qc.concept_id = ?
+                LEFT JOIN concepts c ON q.concept_id = c.id
+                WHERE q.concept_id = ?
                 AND q.id NOT IN (
                     SELECT DISTINCT ua.question_id
                     FROM user_answers ua
                     WHERE ua.session_id = ?
                 )
-                GROUP BY q.id
             )
             SELECT * FROM available_questions
             ORDER BY RANDOM()
@@ -122,8 +119,7 @@ def get_random_questions():
                 WHERE session_id = ? AND question_id IN (
                     SELECT q.id 
                     FROM questions q
-                    JOIN question_concepts qc ON q.id = qc.question_id
-                    WHERE qc.concept_id = ?
+                    WHERE q.concept_id = ?
                 )
             ''', (session_id, concept_id))
             db_conn.commit()
@@ -135,57 +131,62 @@ def get_random_questions():
         return jsonify([{
             'id': q['id'],
             'text': q['text'],
-            'options': q['options'].split('|'),
+            'options': json.loads(q['options']),
             'explanation': q['explanation'],
             'difficulty': q['difficulty'],
-            'hint': q['hint'],
-            'concepts': q['concepts'].split(',') if q['concepts'] else []
+            'hint': q['hint'] if 'hint' in q else '',  # Use dict access with default
+            'concepts': [q['concept_name']] if q['concept_name'] else []
         } for q in questions])
         
     except Exception as e:
         current_app.logger.error(f"Error getting random questions: {str(e)}")
         return jsonify({"error": "Failed to get questions"}), 500
 
-@bp.route('/<int:question_id>/answer', methods=['POST'])
+@bp.route('/<int:question_id>/submit', methods=['POST'])
 def submit_answer(question_id):
     """Submit an answer to a question"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
+        if not data or 'answer' not in data:
+            return jsonify({"error": "No answer provided"}), 400
             
-        answer = data.get('answer')
         session_id = request.headers.get('X-Session-ID')
-        
-        if not answer or not session_id:
-            return jsonify({"error": "Missing required fields"}), 400
+        if not session_id:
+            return jsonify({"error": "No session ID provided"}), 400
             
+        answer = int(data['answer'])  # Convert to int since we store indices
+        time_taken = int(data.get('time_taken', 0))  # Time taken in seconds
+        
         db_conn = db.get_db()
         
-        # Get correct answer
+        # Get the question to check the answer
         question = db_conn.execute(
-            'SELECT correct_answer FROM questions WHERE id = ?',
+            'SELECT * FROM questions WHERE id = ?',
             (question_id,)
         ).fetchone()
         
         if not question:
             return jsonify({"error": "Question not found"}), 404
             
-        # Check if answer is correct
-        is_correct = answer == question['correct_answer']
-        
         # Record the answer
+        is_correct = answer == int(question['correct_answer'])
         db_conn.execute(
-            'INSERT INTO user_answers (session_id, question_id, answer, is_correct, time_taken) '
-            'VALUES (?, ?, ?, ?, ?)',
-            (session_id, question_id, answer, is_correct, data.get('time_taken', 0))
+            'INSERT INTO user_answers (session_id, question_id, answer, is_correct, time_taken) VALUES (?, ?, ?, ?, ?)',
+            (session_id, question_id, answer, is_correct, time_taken)
         )
         db_conn.commit()
         
-        return jsonify({
+        # Parse options from JSON string
+        options = json.loads(question['options'])
+        
+        response = {
             "correct": is_correct,
-            "correct_answer": question['correct_answer']
-        })
+            "correct_answer": int(question['correct_answer']),  # Always include correct answer
+            "explanation": question['explanation'],
+            "correct_answer_text": options[int(question['correct_answer'])]
+        }
+        
+        return jsonify(response)
         
     except Exception as e:
         current_app.logger.error(f"Error submitting answer: {str(e)}")

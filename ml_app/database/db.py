@@ -20,152 +20,83 @@ def convert_datetime(s):
         return None
 
 
+def dict_factory(cursor, row):
+    """Convert sqlite3.Row to dict with proper handling of missing fields."""
+    fields = [column[0] for column in cursor.description]
+    return {key: value for key, value in zip(fields, row)}
+
+
 def get_db():
     """Get database connection."""
     if "db" not in g:
         try:
-            current_app.logger.debug(
-                f"Connecting to database at: {current_app.config['DATABASE']}"
-            )
-            # Register timestamp converter
-            sqlite3.register_adapter(datetime, adapt_datetime)
-            sqlite3.register_converter("timestamp", convert_datetime)
-
+            # Ensure the directory exists
+            db_path = current_app.config["DATABASE"]
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            
+            # Create database connection
             g.db = sqlite3.connect(
-                current_app.config["DATABASE"],
-                detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+                db_path,
+                detect_types=sqlite3.PARSE_DECLTYPES
             )
-            g.db.row_factory = sqlite3.Row
-            current_app.logger.debug("Database connection successful")
+            g.db.row_factory = dict_factory  # Use our custom dict factory
+            current_app.logger.debug(f"Connected to database at {db_path}")
         except Exception as e:
-            current_app.logger.error(f"Database connection failed: {str(e)}")
+            current_app.logger.error(f"Error connecting to database: {str(e)}")
             raise
     return g.db
 
 
 def close_db(e=None):
     """Close database connection."""
-    db = g.pop("db", None)
-
-    if db is not None:
-        try:
+    try:
+        db = g.pop("db", None)
+        if db is not None:
             db.close()
             current_app.logger.debug("Database connection closed successfully")
-        except Exception as e:
-            current_app.logger.error(f"Error closing database: {str(e)}")
-
-
-def load_questions():
-    """Load questions from JSON file into database."""
-    print("Loading questions from JSON file...")
-    # Read questions from JSON file
-    with open("data/ml_questions.json", "r") as f:
-        data = json.load(f)
-
-    print(f"Found {len(data['concepts'])} concepts in JSON file")
-
-    # Get database connection
-    db = get_db()
-
-    try:
-        # Insert concepts and questions
-        concept_count = 0
-        question_count = 0
-
-        for concept_name, concept_data in data["concepts"].items():
-            print(f"Loading concept: {concept_name}")
-            # Add concept
-            cursor = db.execute(
-                "INSERT INTO concepts (name, description) VALUES (?, ?)",
-                (concept_data["name"], concept_data.get("description", "")),
-            )
-            concept_id = cursor.lastrowid
-            concept_count += 1
-
-            # Add questions for this concept
-            for question in concept_data["questions"]:
-                # Convert options list to pipe-separated string
-                options_str = "|".join(question["options"])
-
-                # Insert question
-                cursor = db.execute(
-                    """
-                    INSERT INTO questions 
-                    (text, options, correct_answer, explanation, difficulty, hint)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        question["question"],
-                        options_str,
-                        question["correct"],
-                        question.get("explanation", ""),
-                        question.get("difficulty", "medium"),
-                        question.get("hint", ""),
-                    ),
-                )
-                question_id = cursor.lastrowid
-                question_count += 1
-
-                # Link question to concept
-                db.execute(
-                    """
-                    INSERT INTO question_concepts 
-                    (question_id, concept_id)
-                    VALUES (?, ?)
-                """,
-                    (question_id, concept_id),
-                )
-
-                if question_count % 10 == 0:
-                    print(f"Loaded {question_count} questions...")
-
-        # Commit all changes
-        db.commit()
-
-        # Verify the data was loaded
-        cursor = db.execute("SELECT COUNT(*) FROM concepts")
-        final_concept_count = cursor.fetchone()[0]
-
-        cursor = db.execute("SELECT COUNT(*) FROM questions")
-        final_question_count = cursor.fetchone()[0]
-
-        print("\nVerification:")
-        print(f"- Concepts in database: {final_concept_count}")
-        print(f"- Questions in database: {final_question_count}")
-
-        return True
-
     except Exception as e:
-        print(f"Error loading data: {str(e)}")
-        db.rollback()
+        current_app.logger.error(f"Error closing database: {str(e)}")
+
+
+def database_exists():
+    """Check if database file exists."""
+    try:
+        db_path = current_app.config["DATABASE"]
+        exists = os.path.exists(db_path)
+        current_app.logger.debug(f"Database exists at {db_path}: {exists}")
+        return exists
+    except Exception as e:
+        current_app.logger.error(f"Error checking database existence: {str(e)}")
         return False
 
 
 def init_db():
     """Initialize the database."""
-    db = get_db()
-
+    if database_exists():
+        current_app.logger.info("Database already exists")
+        return True
     try:
-        # Create tables from schema
+        db = get_db()
+        
+        # Create database tables
         with current_app.open_resource("database/schema.sql") as f:
             db.executescript(f.read().decode("utf8"))
-        load_questions()
         db.commit()
-        current_app.logger.info("Database initialized successfully")
+        current_app.logger.info("Database tables created successfully")
+        return True
     except Exception as e:
         current_app.logger.error(f"Error initializing database: {str(e)}")
-        raise
+        if "db" in g:
+            g.db.rollback()
+        return False
 
 
 @click.command("init-db")
+@with_appcontext
 def init_db_command():
     """Clear the existing data and create new tables."""
-    try:
-        init_db()
-        click.echo("Initialized the database.")
-    except Exception as e:
-        click.echo(f"Error initializing database: {str(e)}")
-        raise
+    init_db()
+    click.echo("Initialized the database.")
 
 
 def init_app(app):

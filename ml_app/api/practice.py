@@ -66,7 +66,6 @@ def get_question():
         'id': question['id'],
         'text': question['text'],
         'options': json.loads(question['options']),
-        'hint': question['hint'],
         'difficulty': question['difficulty'],
         'concept': question['concept_name']
     })
